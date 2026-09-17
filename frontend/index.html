@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Study Room Reservation — Home</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+<div class="page">
+
+  <header class="site-header">
+    <div class="container">
+      <p class="site-title">Study Room<span class="dot">.</span></p>
+      <ul class="site-nav">
+        <li><a href="index.html" class="active">Home</a></li>
+        <li><a href="my-reservations.html">My Reservations</a></li>
+        <li><a href="admin.html">Admin</a></li>
+      </ul>
+    </div>
+  </header>
+
+  <main>
+    <div class="container">
+      <h1 class="page-heading">Find a room</h1>
+      <p class="page-subheading">Search by date, time and party size to see what's open.</p>
+
+      <div id="banner-slot"></div>
+
+      <div class="ticket">
+        <div class="ticket-body">
+          <form id="search-form">
+            <div class="field">
+              <label for="date">Date</label>
+              <input type="date" id="date" name="date" required />
+            </div>
+            <div class="field-row">
+              <div class="field">
+                <label for="start">Start time</label>
+                <input type="time" id="start" name="start" required />
+              </div>
+              <div class="field">
+                <label for="end">End time</label>
+                <input type="time" id="end" name="end" required />
+              </div>
+            </div>
+            <div class="field">
+              <label for="people">Number of people</label>
+              <input type="number" id="people" name="people" min="1" value="6" required />
+            </div>
+            <button type="submit" class="btn-block">Check Availability</button>
+          </form>
+        </div>
+      </div>
+
+      <p class="section-label">AVAILABLE ROOMS</p>
+      <div id="results"></div>
+    </div>
+  </main>
+
+  <footer class="site-footer">Study Room Reservation &mdash; local build</footer>
+</div>
+
+<script src="js/api.js"></script>
+<script src="js/home.js"></script>
+</body>
+</html>
