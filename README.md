@@ -1,10 +1,40 @@
-# study-room-reservation
+# Study Room Reservation System
+
+## Team
+
+Team name: Study Room Reservation Team
+
+Members:
+
+- Pham Tien Dat
+- Hussain Syed Izaz
+- Wahab Muhammad
+
+Repository:
+
+https://github.com/benj1011/study-room-reservation
+
+## Project overview
+
+The system allows students to check study-room availability and create
+reservations for a selected time period.
+
+Administrators can confirm and cancel reservation requests. Confirmed
+reservations for the same room must not overlap.
+
+The domain-specific business rule is that the number of people in a
+reservation must not exceed the capacity of the selected room.
+
+The selected external boundary is a Notification Service. Notification
+delivery is outside the C01 implementation scope.
+
 
 ## C01 — PostgreSQL persistence spike
 
-This spike verifies that a DRAFT Reservation can be committed to
-a real PostgreSQL database and loaded correctly in a new SQLAlchemy
-session.
+This spike verifies one runnable end-to-end path: a DRAFT Reservation is
+submitted to `POST /reservations`, validated by FastAPI, committed to a real
+PostgreSQL database, returned with its generated ID, and loaded again in a new
+SQLAlchemy session.
 
 ### Prerequisites
 
@@ -79,24 +109,25 @@ tests/test_persistence.py::test_reservation_persists_in_postgresql PASSED
 ```
 
 The test:
-1. Creates an isolated schema and model tables.
-2. Persists and commits a User and Room.
-3. Persists and commits a DRAFT Reservation.
-4. Clears and closes the writing session.
-5. Loads the Reservation in a new session.
+
+1. Creates an isolated schema and model tables in PostgreSQL.
+2. Persists the User and Room required by the reservation.
+3. Sends a valid request to `POST /reservations`.
+4. Verifies HTTP `201`, the generated reservation ID, and the `DRAFT` state.
+5. Opens a new SQLAlchemy session and loads the Reservation by that ID.
 6. Verifies its fields and related User and Room.
-7. Removes the test schema.
+7. Removes the isolated test schema.
 
 The test account needs permission to create schemas in the test
 database. The test uses a real PostgreSQL database, not SQLite.
 
 ### Scope and limitations
 
-This test demonstrates persistence only.
-It does not implement or verify:
+This test demonstrates the CP1 create-and-persist path. It does not verify:
+
 - Prevention of overlapping CONFIRMED reservations.
 - Enforcement of reservation attendance against room capacity.
-- Frontend or FastAPI endpoints.
+- Frontend behavior.
 
 The tables created by this test are removed after execution.
 Running this test does not initialize persistent application tables.
@@ -111,5 +142,130 @@ deactivate
 ### Evidence
 
 See:
+
 - [Spike evidence](docs/evidence-and-evolution.md)
 - [Persistence decisions](docs/architecture-and-decisions.md)
+
+## CP1 walking skeleton
+
+The CP1 end-to-end path is:
+
+`POST /reservations` → validate the request → persist it in PostgreSQL →
+return HTTP `201` with the generated reservation ID → load it again and verify
+the stored data.
+
+The automated check is the C01 persistence test:
+
+```bash
+python -m pytest tests/test_persistence.py -v
+```
+
+The test uses an isolated PostgreSQL schema and removes it when it finishes.
+
+## Run the integrated backend and frontend
+
+Run commands from the repository root. The API reuses `src/database.py`
+with psycopg 3 and the shared models in `src/models.py`.
+
+### 1. Install dependencies and configure an application database
+
+```bash
+source .venv/bin/activate
+python -m pip install -r requirements.txt
+createdb -h localhost -p 5432 -U postgres -W study_room_app
+export DATABASE_URL='postgresql+psycopg://postgres@localhost:5432/study_room_app'
+read -s "PGPASSWORD?PostgreSQL password: "
+export PGPASSWORD
+```
+
+Use your own PostgreSQL account. Create the database only once. This is a
+separate application database; C01 continues to use `study_room_c01_test`.
+
+### 2. Initialize tables and start the API
+
+```bash
+python -m src.init_db
+python -m uvicorn src.main:app --reload --host 127.0.0.1 --port 8000
+```
+
+Open <http://127.0.0.1:8000/docs>. Initialization creates missing tables and
+the PostgreSQL state enum; it does **not** migrate tables from a previous schema
+version. Use a fresh application database for this integration. Retaining old
+data requires a separate migration, especially for timestamps and enum values.
+Importing the API does not initialize tables or connect to PostgreSQL.
+
+### 3. Add demo data
+
+For a complete repeatable dataset, run:
+
+```bash
+python -m src.seed_demo
+```
+
+This creates three rooms, two users, and five reservations covering DRAFT,
+CONFIRMED, and CANCELLED states. Reservations are scheduled for the following
+day. Running the command again replaces only reservations whose purpose starts
+with `[DEMO]`; it does not delete other application data. The command prints
+the current frontend user ID and warns if it is not `1`.
+
+Alternatively, add individual records through Swagger. Use `POST /users` with:
+
+```json
+{"name": "Dat", "email": "dat@example.com"}
+```
+
+Use `POST /rooms` with:
+
+```json
+{"name": "A101", "location": "Library", "capacity": 6}
+```
+
+The frontend assumes demo user ID `1`; if the seed output or returned user ID differs,
+update `CURRENT_USER_ID` in `src/frontend/js/api.js`. Authentication and
+admin authorization are not implemented.
+
+### 4. Serve the frontend in another terminal
+
+From the repository root:
+
+```bash
+python3 -m http.server 5500 --bind 127.0.0.1 --directory src/frontend
+```
+
+Open <http://127.0.0.1:5500>. Search for a room, create a DRAFT, confirm it
+on the Admin page, and cancel it from My Reservations. API errors are shown
+instead of silently falling back to mock data. Entered times use the browser's
+local timezone, are sent as UTC ISO timestamps, and are displayed in local time.
+
+### API contract
+
+- `GET /users`, `POST /users`
+- `GET /rooms`, `POST /rooms`
+- `GET /rooms/available?start_time=<ISO with timezone>&end_time=<ISO with timezone>&people=4`
+- `GET /reservations` (all), `GET /reservations?user_id=1` (filtered)
+- `GET /reservations/{id}`, `POST /reservations`
+- `POST /reservations/{id}/confirm`
+- `POST /reservations/{id}/cancel` (`PATCH` remains a compatibility alias)
+
+DRAFT reservations do not hold a room. Confirmation rechecks capacity and
+conflicts with CONFIRMED reservations. Adjacent time windows are allowed.
+Confirm and cancel acquire a PostgreSQL row lock on the room until commit,
+serializing state changes for that room under PostgreSQL's default READ COMMITTED
+isolation. Direct database writes bypass this API rule; no database exclusion
+constraint has been added. The destructive testing-reset endpoint is not exposed.
+
+### Automated verification
+
+Configure `DATABASE_URL` and `PGPASSWORD` for `study_room_c01_test` as in C01,
+then run:
+
+```bash
+python -m pytest tests/test_persistence.py -v
+```
+
+The test uses real PostgreSQL, creates a uniquely named schema, sends a request
+to the reservation API, reloads the saved Reservation in a new session, and
+removes the schema afterwards.
+
+See [the integration walkthrough](docs/backend-integration.md) for the changes
+from the previous standalone backend and their reasons.
