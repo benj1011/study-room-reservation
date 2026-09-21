@@ -85,3 +85,8 @@ class Reservation(Base):
 
     user: Mapped["User"] = relationship(back_populates="reservations")
     room: Mapped["Room"] = relationship(back_populates="reservations")
+
+    @property
+    def room_name(self) -> str:
+        """Expose the related room code in API responses without duplicating it."""
+        return self.room.name

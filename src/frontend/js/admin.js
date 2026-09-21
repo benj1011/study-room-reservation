@@ -1,6 +1,6 @@
 function showBanner(message, type = "info") {
   const slot = document.getElementById("banner-slot");
-  slot.innerHTML = `<div class="banner banner-${type}">${message}</div>`;
+  slot.innerHTML = `<div class="banner banner-${type}">${escapeHtml(message)}</div>`;
 }
 
 function stampClass(state) {
@@ -10,9 +10,11 @@ function stampClass(state) {
 }
 
 function formatDateTime(iso) {
-  const [datePart, timePart] = iso.split("T");
-  const [y, m, d] = datePart.split("-");
-  return { date: `${d}/${m}/${y}`, time: timePart.slice(0, 5) };
+  const value = new Date(iso);
+  return {
+    date: value.toLocaleDateString(),
+    time: value.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+  };
 }
 
 function render(reservations) {
@@ -38,13 +40,13 @@ function render(reservations) {
       <div class="ticket" data-id="${r.id}">
         <div class="ticket-header">
           <div>
-            <div class="room-code">Reservation #${r.id} &nbsp;·&nbsp; ${r.room_name || "Room #" + r.room_id}</div>
+            <div class="room-code">Reservation #${r.id} &nbsp;·&nbsp; ${escapeHtml(r.room_name || "Room #" + r.room_id)}</div>
             <div class="meta-line">${startInfo.date} &nbsp;·&nbsp; ${startInfo.time} – ${endInfo.time} &nbsp;·&nbsp; ${r.number_of_people} people</div>
           </div>
           <span class="stamp ${stampClass(r.state)}">${r.state}</span>
         </div>
         <div class="ticket-body">
-          <p class="helper-text" style="margin: 0 0 14px;">Purpose: ${r.purpose || "—"}</p>
+          <p class="helper-text" style="margin: 0 0 14px;">Purpose: ${escapeHtml(r.purpose || "—")}</p>
           ${
             isPending
               ? `<div class="actions-row">
@@ -71,8 +73,7 @@ async function handleConfirm(id) {
     await confirmReservation(id);
     await load();
   } catch (err) {
-    // Overlap rejection lands here — the backend (or the mock
-    // standing in for it) enforces "no two confirmed overlaps".
+    // The API reports confirmation conflicts here.
     showBanner(err.message || "Couldn't confirm that reservation.", "error");
   }
 }
@@ -91,12 +92,6 @@ async function load() {
   list.innerHTML = `<p class="helper-text">Loading reservations…</p>`;
   try {
     const reservations = await getAllReservations();
-    if (isUsingMockData()) {
-      showBanner(
-        "Backend not reachable yet — showing mock reservations for now.",
-        "info"
-      );
-    }
     render(reservations);
   } catch (err) {
     showBanner(err.message || "Couldn't load reservations.", "error");

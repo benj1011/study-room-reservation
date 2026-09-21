@@ -1,6 +1,6 @@
 function showBanner(message, type = "info") {
   const slot = document.getElementById("banner-slot");
-  slot.innerHTML = `<div class="banner banner-${type}">${message}</div>`;
+  slot.innerHTML = `<div class="banner banner-${type}">${escapeHtml(message)}</div>`;
 }
 
 function clearBanner() {
@@ -27,8 +27,8 @@ function renderRooms(rooms, { date, start, end, people }) {
       (room) => `
       <div class="ticket">
         <div class="ticket-body">
-          <div class="room-code">${room.name}</div>
-          <div class="meta-line">Capacity: ${room.capacity} &nbsp;·&nbsp; Location: ${room.location}</div>
+          <div class="room-code">${escapeHtml(room.name)}</div>
+          <div class="meta-line">Capacity: ${room.capacity} &nbsp;·&nbsp; Location: ${escapeHtml(room.location)}</div>
           <div class="actions-row" style="margin-top: 14px;">
             <a class="btn btn-confirm" href="create-reservation.html?room_id=${room.id}&room_name=${encodeURIComponent(
         room.name
@@ -61,12 +61,6 @@ async function handleSearch(event) {
 
   try {
     const rooms = await checkAvailability({ date, start, end, people });
-    if (isUsingMockData()) {
-      showBanner(
-        "Backend not reachable yet — showing mock rooms so you can keep building. This will switch to real data automatically once the API is up.",
-        "info"
-      );
-    }
     renderRooms(rooms, { date, start, end, people });
   } catch (err) {
     showBanner(err.message || "Something went wrong checking availability.", "error");
