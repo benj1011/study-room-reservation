@@ -1,5 +1,8 @@
 # Project Frame
 
+This document records the v0.1 foundation. For the current approval change,
+see [Baseline v0.2](baseline-v0.2.md) and its explicit scope and C03 drivers.
+
 ## Reservation domain
 
 The system reserves study rooms for students.
@@ -75,11 +78,14 @@ A Reservation contains:
 The system supports the following core operations:
 
 - Create a reservation.
-- Confirm or approve a reservation.
+- Confirm a reservation.
 - Cancel a reservation.
 - Check room availability.
-- View reservations belonging to a user.
-- View all reservations for administration.
+
+Viewing reservations belonging to a user and viewing all reservations are
+supporting queries, not additional core operations.
+
+The complete minimum contract is defined in [Baseline v0.1](baseline-v0.1.md).
 
 ## Persistent state
 
@@ -116,8 +122,8 @@ through foreign keys.
 
 The system uses the following Reservation states:
 
-- `DRAFT` — the reservation has been created but has not been approved.
-- `CONFIRMED` — the reservation has been approved and holds the room.
+- `DRAFT` — the reservation has been created but does not allocate the room.
+- `CONFIRMED` — the reservation allocates the room for its time interval.
 - `CANCELLED` — the reservation is no longer active and does not hold
   the room.
 

@@ -1,9 +1,10 @@
 """FastAPI endpoints using the PostgreSQL persistence layer from main."""
 
 from contextlib import asynccontextmanager
+from datetime import timedelta
 from typing import Annotated
 
-from fastapi import Depends, FastAPI, HTTPException, Query, Request
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import AwareDatetime
 from sqlalchemy import select
@@ -11,9 +12,10 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
 from src.database import create_db_engine, create_session_factory
-from src.models import Reservation, ReservationState, Room, User
+from src import models
+from src.models import ApprovalStatus, Reservation, ReservationState, Room, User
 from src.schemas import (
-    ReservationCreate, ReservationRead, RoomCreate, RoomRead, UserCreate, UserRead,
+    ApprovalDecision, ReservationCreate, ReservationRead, RoomCreate, RoomRead, UserCreate, UserRead,
 )
 
 
@@ -32,7 +34,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://127.0.0.1:5500", "http://localhost:5500"],
     allow_methods=["GET", "POST", "PATCH"],
-    allow_headers=["Content-Type"],
+    allow_headers=["Content-Type", "X-User-Id"],
 )
 
 
@@ -89,6 +91,8 @@ def get_rooms(db: DB):
 
 @app.post("/rooms", response_model=RoomRead, status_code=201)
 def create_room(payload: RoomCreate, db: DB):
+    if payload.approver_user_id is not None and db.get(User, payload.approver_user_id) is None:
+        raise HTTPException(404, "Approver not found")
     room = Room(**payload.model_dump())
     db.add(room)
     return save(db, room)
@@ -147,7 +151,16 @@ def create_reservation(payload: ReservationCreate, db: DB):
         raise HTTPException(404, "Room not found")
     if payload.number_of_people > room.capacity:
         raise HTTPException(422, f"Room capacity is {room.capacity} people")
-    reservation = Reservation(**payload.model_dump(), state=ReservationState.DRAFT)
+    approval_fields = {}
+    if room.requires_approval:
+        now = models.utc_now()
+        if payload.start_time <= now:
+            raise HTTPException(422, "Approval-required reservations must start in the future")
+        approval_fields = {
+            "approval_decision": ApprovalStatus.PENDING,
+            "approval_deadline": min(now + timedelta(hours=24), payload.start_time),
+        }
+    reservation = Reservation(**payload.model_dump(), state=ReservationState.DRAFT, **approval_fields)
     db.add(reservation)
     return save(db, reservation)
 
@@ -169,6 +182,10 @@ def confirm_reservation(reservation_id: int, db: DB):
     reservation, room = lock_reservation_room(db, reservation_id)
     if reservation.state != ReservationState.DRAFT:
         raise HTTPException(409, "Only DRAFT reservations can be confirmed")
+    if reservation.effective_approval_status(models.utc_now()) not in (
+        ApprovalStatus.NOT_REQUIRED, ApprovalStatus.APPROVED,
+    ):
+        raise HTTPException(409, "Reservation requires a valid approval before confirmation")
     if reservation.number_of_people > room.capacity:
         raise HTTPException(422, f"Room capacity is {room.capacity} people")
     conflict = db.scalar(select(Reservation.id).where(
@@ -191,4 +208,30 @@ def cancel_reservation(reservation_id: int, db: DB):
     if reservation.state == ReservationState.CANCELLED:
         raise HTTPException(409, "Reservation is already cancelled")
     reservation.state = ReservationState.CANCELLED
+    return save(db, reservation)
+
+
+@app.post("/reservations/{reservation_id}/approve", response_model=ReservationRead)
+def approve_reservation(
+    reservation_id: int,
+    payload: ApprovalDecision,
+    db: DB,
+    actor_id: Annotated[int | None, Header(alias="X-User-Id", gt=0)] = None,
+):
+    """Record one assigned approver's decision; this never allocates the room.
+
+    X-User-Id is a trusted demo identity assertion, not production authentication.
+    """
+    if actor_id is None:
+        raise HTTPException(401, "Demo identity X-User-Id is required")
+    reservation, room = lock_reservation_room(db, reservation_id)
+    if db.get(User, actor_id) is None or actor_id != room.approver_user_id:
+        raise HTTPException(403, "User is not the assigned approver for this room")
+    now = models.utc_now()  # Evaluate after any wait for the room lock.
+    if (reservation.state != ReservationState.DRAFT
+            or reservation.effective_approval_status(now) != ApprovalStatus.PENDING):
+        raise HTTPException(409, "Only an unexpired pending DRAFT can receive an approval decision")
+    reservation.approval_decision = ApprovalStatus(payload.decision)
+    reservation.decided_by = actor_id
+    reservation.decided_at = now
     return save(db, reservation)
