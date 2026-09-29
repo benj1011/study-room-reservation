@@ -1,0 +1,48 @@
+============================= test session starts ==============================
+platform darwin -- Python 3.13.1, pytest-9.1.1, pluggy-1.6.0 -- /Users/dat.pham/Documents/winter-semeter(26-27)/SWE/SWE-CD01/room_booking/study-room-reservation/.venv/bin/python
+cachedir: .pytest_cache
+rootdir: /Users/dat.pham/Documents/winter-semeter(26-27)/SWE/SWE-CD01/room_booking/study-room-reservation
+plugins: anyio-4.15.1
+collecting ... collected 29 items
+
+tests/test_baseline.py::test_create_durable_draft_without_allocation PASSED [  3%]
+tests/test_baseline.py::test_create_rejection_has_no_write[changes0-422] PASSED [  6%]
+tests/test_baseline.py::test_create_rejection_has_no_write[changes1-422] PASSED [ 10%]
+tests/test_baseline.py::test_create_rejection_has_no_write[changes2-422] PASSED [ 13%]
+tests/test_baseline.py::test_create_rejection_has_no_write[changes3-422] PASSED [ 17%]
+tests/test_baseline.py::test_create_rejection_has_no_write[changes4-422] PASSED [ 20%]
+tests/test_baseline.py::test_create_rejection_has_no_write[changes5-422] PASSED [ 24%]
+tests/test_baseline.py::test_create_rejection_has_no_write[changes6-422] PASSED [ 27%]
+tests/test_baseline.py::test_create_rejection_has_no_write[changes7-404] PASSED [ 31%]
+tests/test_baseline.py::test_create_rejection_has_no_write[changes8-404] PASSED [ 34%]
+tests/test_baseline.py::test_availability_boundaries_blocking_and_capacity PASSED [ 37%]
+tests/test_baseline.py::test_availability_invalid_query[10:00-10:00-1] PASSED [ 41%]
+tests/test_baseline.py::test_availability_invalid_query[11:00-10:00-1] PASSED [ 44%]
+tests/test_baseline.py::test_availability_invalid_query[10:00-11:00-0] PASSED [ 48%]
+tests/test_baseline.py::test_confirm_success_conflict_and_adjacent_interval PASSED [ 51%]
+tests/test_baseline.py::test_confirm_rechecks_capacity PASSED            [ 55%]
+tests/test_baseline.py::test_confirm_invalid_source_state[CONFIRMED] PASSED [ 58%]
+tests/test_baseline.py::test_confirm_invalid_source_state[CANCELLED] PASSED [ 62%]
+tests/test_baseline.py::test_cancel_retains_details_releases_allocation_and_rejects_repeat[False] PASSED [ 65%]
+tests/test_baseline.py::test_cancel_retains_details_releases_allocation_and_rejects_repeat[True] PASSED [ 68%]
+tests/test_baseline.py::test_missing_reservation[confirm] PASSED         [ 72%]
+tests/test_baseline.py::test_missing_reservation[cancel] PASSED          [ 75%]
+tests/test_baseline.py::test_concurrent_confirms_allocate_at_most_once[0] PASSED [ 79%]
+tests/test_baseline.py::test_concurrent_confirms_allocate_at_most_once[1] PASSED [ 82%]
+tests/test_baseline.py::test_concurrent_confirms_allocate_at_most_once[2] PASSED [ 86%]
+tests/test_baseline.py::test_concurrent_confirm_cancel_never_resurrects[0] PASSED [ 89%]
+tests/test_baseline.py::test_concurrent_confirm_cancel_never_resurrects[1] PASSED [ 93%]
+tests/test_baseline.py::test_concurrent_confirm_cancel_never_resurrects[2] PASSED [ 96%]
+tests/test_baseline.py::test_cancel_past_interval_has_no_deadline PASSED [100%]
+
+=============================== warnings summary ===============================
+.venv/lib/python3.13/site-packages/fastapi/testclient.py:1
+  /Users/dat.pham/Documents/winter-semeter(26-27)/SWE/SWE-CD01/room_booking/study-room-reservation/.venv/lib/python3.13/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+.venv/lib/python3.13/site-packages/starlette/testclient.py:53
+  /Users/dat.pham/Documents/winter-semeter(26-27)/SWE/SWE-CD01/room_booking/study-room-reservation/.venv/lib/python3.13/site-packages/starlette/testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+======================== 29 passed, 2 warnings in 1.38s ========================

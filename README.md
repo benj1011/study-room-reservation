@@ -29,6 +29,98 @@ The selected external boundary is a Notification Service. Notification
 delivery is outside the C01 implementation scope.
 
 
+## Current baseline v0.2 — approval workflow
+
+Part B.12–14 adds approval-required rooms and an assigned Approver. See:
+
+- [Pre-edit impact analysis / change card](docs/change-approval-impact.md)
+- [v0.2 specification and five full slices](docs/baseline-v0.2.md)
+- [Updated actor, lifecycle, approval and activity views](docs/baseline-v0.2-diagrams.md)
+
+Part B.15 is deferred. Team acceptance is pending; this is the implemented
+baseline prepared for review. The complete v0.2 interface is API/Swagger.
+The existing browser pages remain a v0.1 demonstration and have no Approve UI.
+
+After activating `.venv` and configuring `DATABASE_URL` as below:
+
+- For a **new database**, run `python -m src.init_db`.
+- For an **existing v0.1 database**, stop its API and run
+  `python -m src.migrate_v02` before restarting. This additive migration preserves
+  old records as NOT_REQUIRED; `init_db` alone does not migrate old tables.
+
+Start the API:
+
+```bash
+python -m uvicorn src.main:app --reload --host 127.0.0.1 --port 8000
+```
+
+At <http://127.0.0.1:8000/docs>, try the following sequence:
+
+1. Create a student and an approver with `POST /users`; keep their returned ids.
+2. Create a room with `POST /rooms`, using the actual approver id:
+
+   ```json
+   {"name":"Approval Room","location":"Library","capacity":6,
+    "requires_approval":true,"approver_user_id":2}
+   ```
+
+3. Create a reservation using the student's id and the returned room id.
+   Choose timezone-aware start/end timestamps in the future. It returns
+   DRAFT/PENDING with `approval_deadline`.
+4. Try Confirm: it returns 409 while approval is pending.
+5. Call `POST /reservations/{id}/approve` with `X-User-Id` set to the assigned
+   approver's id and body `{"decision":"APPROVED"}`. The result remains DRAFT.
+   Use `{"decision":"REJECTED"}` on another pending request to demonstrate rejection.
+6. Confirm the approved request before its deadline. It succeeds only if capacity
+   and availability still permit it. Cancel retains the record as before.
+
+The deadline is the earlier of Create + 24 hours and the reservation start.
+At/after the deadline, pending or approved drafts report EXPIRED and cannot
+confirm. Expiry is computed on read/validation; there is no background service.
+`X-User-Id` is a trusted demo assertion, not secure authentication. The assigned
+user check is implemented; production identity integration is deferred to C03.
+
+Run v0.2 and ordinary-room regression checks against a configured test database:
+
+```bash
+python -m pytest tests/test_baseline.py tests/test_approval.py -v --tb=short
+```
+
+Tests isolate and remove their own schemas. No Uvicorn/frontend process is
+needed for the test suite. Deadline tests use a controlled clock, so no 24-hour
+wait is needed.
+
+## Historical baseline v0.1 — minimum system specification
+
+[Baseline v0.1](docs/baseline-v0.1.md) defines the four core operations:
+Create Reservation, Check Availability, Confirm Reservation, and Cancel
+Reservation. Create stores a DRAFT without allocating a room; Confirm allocates
+it; Cancel retains the record and releases any allocation. The baseline has
+no approval workflow.
+
+Part A artifacts:
+
+- [Four full operation slices and shared rules](docs/baseline-v0.1.md)
+- [Actor-goal, lifecycle and four activity diagrams](docs/baseline-v0.1-diagrams.md)
+- [Requirement gate, consistency review and team sign-off](docs/baseline-v0.1-review.md)
+- [C02 execution evidence and coverage](docs/baseline-v0.1-evidence.md)
+
+The selected scope retains trusted demo identity and treats every registered
+room as active. Cancellation has no time cutoff; repeated cancellation is a
+conflict. These are explicit scope/policy decisions, not authentication or
+inactive-room functionality. Team acceptance is pending.
+
+Run the separate C02 suite against a configured PostgreSQL test database:
+
+```bash
+python -m pytest tests/test_baseline.py -v
+```
+
+It creates and removes its own `c02_test_*` schemas and exercises all four API
+operations, including synchronized requests on independent DB sessions.
+The existing application runs using the backend instructions below; no new UI
+is required for Part A.
+
 ## C01 — PostgreSQL persistence spike
 
 This spike verifies one runnable end-to-end path: a DRAFT Reservation is
@@ -267,5 +359,5 @@ The test uses real PostgreSQL, creates a uniquely named schema, sends a request
 to the reservation API, reloads the saved Reservation in a new session, and
 removes the schema afterwards.
 
-See [the integration walkthrough](docs/backend-integration.md) for the changes
-from the previous standalone backend and their reasons.
+See [architecture and decisions](docs/architecture-and-decisions.md) for the
+current implementation and its limitations.

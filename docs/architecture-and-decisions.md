@@ -1,5 +1,8 @@
 # Architecture and Decisions
 
+This document records the v0.1 foundation. For the current approval change,
+see [Baseline v0.2](baseline-v0.2.md) and its explicit scope and C03 drivers.
+
 ## System overview
 
 The Study Room Reservation System is a small web application with
@@ -234,8 +237,8 @@ protection.
 
 Only `CONFIRMED` reservations block room availability.
 
-`DRAFT` reservations do not block a room because they have not yet been
-approved.
+`DRAFT` reservations do not block a room because allocation occurs only on successful
+confirmation.
 
 `CANCELLED` reservations never block a room.
 
