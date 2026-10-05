@@ -1,7 +1,237 @@
 # Architecture and Decisions
 
-This document records the v0.1 foundation. For the current approval change,
-see [Baseline v0.2](baseline-v0.2.md) and its explicit scope and C03 drivers.
+## C03 Architecture Baseline
+
+This architecture view describes the implemented v0.2 baseline and its C03
+drivers. It is prepared for review; it does not claim team acceptance, a CP1
+freeze, or production readiness. Historical v0.1 notes are retained below.
+
+The C01 persistence spike and C02 behavior evidence are inputs to this design.
+The repository still contains placeholders for the C01 reviewer and review
+result, and its baseline documents say team acceptance is pending. This
+architecture therefore does not claim that those human gates or the CP1 freeze
+are complete.
+
+### Scope and drivers
+
+The system supports room discovery, reservation creation, approval,
+confirmation, and cancellation. The current implementation is a small web
+application backed by PostgreSQL. Its architecture prioritizes durable
+reservation data, exclusive allocation, explicit business validation, and
+preservation of v0.1 records during the v0.2 schema change.
+
+| Driver | Current architectural response or limit |
+| --- | --- |
+| Identity and per-room authorization | `X-User-Id` is a trusted demo assertion; production authentication and authorization are not implemented. |
+| Atomic transitions under contention | Confirm, cancel, and approve lock the related Room row. API transitions serialize per room; direct database writes bypass this rule. |
+| Authoritative time and expiry | A UTC clock function and timezone-aware timestamps are used. Expiry is derived at read/transition time; multi-instance clock policy is unresolved. |
+| Retry and idempotency | No idempotency key or duplicate-request policy is implemented. |
+| Decision audit retention | The latest decision stores `decided_by` and `decided_at`; append-only history and retention policy are unresolved. |
+| Schema evolution | A manual additive PostgreSQL migration preserves v0.1 records. No general migration framework or rollback policy is selected. |
+| Notifications | Notification Service is an external boundary only. Whether proactive expiry/decision delivery is required remains unresolved. |
+
+### Context and container view
+
+```mermaid
+flowchart LR
+   Student[Student]
+   Admin[Administrator]
+   Approver[Assigned approver]
+   Browser[Browser pages\nHTML, CSS, JavaScript]
+   API[FastAPI application\nPydantic contracts and route logic]
+   ORM[SQLAlchemy models and sessions]
+   DB[(PostgreSQL)]
+   Notify[Notification Service\nnot integrated]
+
+   Student --> Browser
+   Admin --> Browser
+   Approver --> API
+   Browser -->|HTTP and JSON| API
+   API --> ORM
+   ORM -->|SQL and transactions| DB
+   API -. future boundary .-> Notify
+```
+
+The browser pages remain a v0.1 demonstration and do not expose the v0.2
+approval workflow; the complete v0.2 interface is the HTTP API. The
+Notification Service is not a runtime integration.
+
+### Component responsibilities
+
+| Component | Responsibility and implementation |
+| --- | --- |
+| Browser client | Static HTML, CSS, and JavaScript; calls the API over HTTP/JSON. Demo identity is configured in the client. |
+| API and application logic | `src/main.py` defines FastAPI routes, request-scoped sessions, entity validation, approval rules, room locking, and transaction commits. There is no separate service layer. |
+| Request/response contracts | `src/schemas.py` uses Pydantic for payload shape, timezone-aware timestamps, positive values, and room approval configuration. |
+| Persistence mapping | `src/models.py` defines User, Room, and Reservation mappings, enums, foreign keys, checks, and derived approval status. |
+| Database configuration | `src/database.py` creates the SQLAlchemy engine and session factory from `DATABASE_URL`; the API disposes the engine at shutdown. |
+| Database | PostgreSQL stores users, rooms, reservations, constraints, and enum types. |
+
+### Proposed logical architecture
+
+Keep one deployable FastAPI application and one PostgreSQL database, but give
+the code explicit internal boundaries. This modular-monolith approach preserves
+the single-database transaction needed by reservation invariants without
+introducing network calls between services. These are target boundaries, not
+claims about the current source layout.
+
+```mermaid
+flowchart LR
+  Client[Browser or API client]
+  IdP[Identity provider\nfuture; not selected]
+  HTTP[HTTP adapter\nFastAPI and Pydantic]
+  Auth[Identity adapter\nverified principal]
+  UseCases[Application use cases\nCreate, Check, Confirm, Cancel, Approve]
+  Domain[Domain rules\nreservation and approval policies]
+  UoW[Unit of Work\ntransaction boundary]
+  Repo[PostgreSQL repositories\nSQLAlchemy and row locks]
+  Clock[Clock port\nUTC instant]
+  DB[(PostgreSQL)]
+  Notify[Notification port\nfuture only]
+
+  Client --> HTTP
+  IdP -. identity token .-> Auth
+  Auth --> HTTP
+  HTTP --> UseCases
+  UseCases --> Domain
+  UseCases --> UoW
+  UoW --> Repo
+  Repo --> DB
+  UseCases --> Clock
+  Clock --> DB
+  UseCases -. after-commit event if required .-> Notify
+```
+
+| Boundary | Owns |
+| --- | --- |
+| HTTP adapter | Parse and validate transport data, obtain a verified actor, call one use case, and map domain outcomes to HTTP responses. It must not decide reservation eligibility itself. |
+| Application use cases | Coordinate Create, Check Availability, Confirm, Cancel, and Approve; enforce authorization; define the transaction boundary and call domain policies. |
+| Domain | Express interval overlap, capacity, lifecycle, approval, and deadline rules independently of FastAPI and SQLAlchemy. |
+| Persistence adapters | Implement repositories and a Unit of Work with PostgreSQL transactions. State-changing use cases use the same room-lock protocol; simple database constraints remain a second line of defense. |
+| Identity adapter | Convert a verified external identity into an application actor. The current `X-User-Id` assertion is a demo adapter only. |
+| Clock adapter | Supply one UTC instant to domain decisions. Tests substitute a controlled clock; a multi-instance deployment needs one authoritative source. |
+| Notification adapter | Remains absent until requirements exist. If reliable post-commit delivery becomes required, use an outbox rather than coupling delivery success to reservation commit. |
+
+The intended dependency direction is HTTP adapter → application → domain.
+Persistence, identity, time, and notification implementations sit at the
+outside and are called through application-owned interfaces. The domain does
+not import FastAPI, Pydantic, or SQLAlchemy.
+
+### Confirm transaction sequence
+
+```mermaid
+sequenceDiagram
+  participant Admin
+  participant API as HTTP adapter
+  participant UC as Confirm use case
+  participant DB as PostgreSQL Unit of Work
+  Admin->>API: Confirm reservation
+  API->>UC: actor and reservation id
+  UC->>DB: begin transaction; load reservation and room
+  UC->>DB: lock room row; refresh reservation
+  Note over UC,DB: Re-read after lock; sample decision time after waiting
+  UC->>UC: check state, approval, capacity, and overlap
+  alt all guards pass
+    UC->>DB: persist CONFIRMED and commit
+    DB-->>API: committed reservation
+    API-->>Admin: success
+  else guard fails
+    UC->>DB: rollback
+    API-->>Admin: conflict or validation error
+  end
+```
+
+Every state-changing use case must acquire the room lock before its final
+eligibility checks and must re-read state after waiting. That common protocol
+is why the reservation invariants belong in application/domain behavior backed
+by one database transaction, rather than in separate services. Availability is
+a read-only snapshot; Confirm always rechecks capacity and overlap.
+
+### Runtime and data decisions
+
+Create validates the request and references, checks room capacity, and stores
+a DRAFT. For an approval-required room it also stores PENDING and a deadline
+equal to the earlier of creation plus 24 hours or reservation start. Neither
+state allocates or temporarily holds the room.
+
+Approve, confirm, and cancel acquire the same PostgreSQL Room row lock and
+refresh the reservation after waiting. Approval records one assigned
+approver's decision without changing DRAFT. Confirmation rechecks lifecycle
+state, approval eligibility, capacity, and overlap while holding the lock,
+then commits CONFIRMED. Under READ COMMITTED, competing API transitions for a
+room observe the preceding commit after acquiring the lock. This is an
+application transaction guarantee, not a database exclusion constraint.
+
+Availability filters by capacity and excludes only overlapping CONFIRMED
+reservations. Expiry is derived for pending or approved DRAFT reservations
+when UTC now is at or after the deadline; no background mutation occurs.
+Intervals are half-open: overlap is `existing.start_time < requested.end_time`
+and `existing.end_time > requested.start_time`, so adjacent bookings are
+allowed.
+
+Reservation lifecycle (DRAFT, CONFIRMED, CANCELLED) is separate from approval
+decision (NOT_REQUIRED, PENDING, APPROVED, REJECTED). EXPIRED is derived for
+eligible DRAFT states. User and Room references are foreign keys; Room capacity
+and reservation attendance are positive; the reservation end must follow its
+start. `room_name` is derived from the Room relationship rather than copied.
+
+### Quality scenarios and evidence
+
+These scenarios record demonstrated behavior, not numeric service objectives
+or production-scale guarantees.
+
+| Attribute | Stimulus and expected response | Evidence and limit |
+| --- | --- | --- |
+| Consistency under contention | Two independent requests confirm overlapping drafts for one room; at most one commits CONFIRMED. | C02 PostgreSQL tests synchronize separate sessions and observe one success and one conflict. They do not prove every schedule or high-load performance. |
+| Durable persistence | A valid create commits a DRAFT, returns its id, and a new session reloads the reservation and references. | C01 persistence spike passed with real PostgreSQL. Process-restart recovery is not separately demonstrated. |
+| Approval boundary correctness | At the exact deadline, approval/confirmation is rejected; a confirmed reservation remains allocated after the deadline. | v0.2 tests use a controlled clock. Multi-host clock drift and time-service failure remain unresolved. |
+| Existing-data evolution | The v0.2 migration preserves v0.1 reservations as NOT_REQUIRED and can be applied repeatedly. | Migration tests cover this additive PostgreSQL migration only; general upgrade and rollback policy is not established. |
+| Assigned approver | Only the assigned user's demo id can record a decision. | v0.2 tests cover assignment checks. The header is not authenticated and is not a security boundary. |
+
+### Deployment and operations
+
+The documented local topology runs FastAPI as a Python process, PostgreSQL as
+a separate database service, and static browser files through a local HTTP
+server. The API reads `DATABASE_URL`; it does not create or migrate tables on
+import/startup. New databases use `python -m src.init_db`; existing v0.1
+databases require the API to be stopped while `python -m src.migrate_v02`
+runs. C02 tests create and remove isolated PostgreSQL schemas.
+
+No production deployment topology, TLS termination, secret manager, backup or
+restore procedure, monitoring, horizontal scaling policy, or recovery
+objective has been specified or verified.
+
+### C03 architectural decisions
+
+| Decision | C03 stance | Status and consequence |
+| --- | --- | --- |
+| Deployment shape | Keep a modular monolith and shared PostgreSQL database. | Selected for this scale and the need for atomic transitions; a hot room serializes by design. Measure before considering partitioning or service extraction. |
+| State-transition consistency | One application Unit of Work; Confirm, Cancel, and Approve share the room-row lock and refresh protocol. | Current behavior already follows this for API requests. Direct database writes remain unsupported and can bypass the invariant. |
+| Identity | Require a verified principal at the HTTP boundary and pass an application actor to use cases. | Target boundary selected; provider, role mapping, and credential lifecycle remain open. The demo header is not production authentication. |
+| Time | Inject a UTC clock. For multiple API instances, obtain the transition-time instant from PostgreSQL after acquiring the lock. | Target policy; current code calls a process-local UTC clock, so multi-host consistency is not yet guaranteed. Keep exact deadline tests on a replaceable clock. |
+| Retries | Preserve existing state semantics. Add an idempotency-key record only when client retry requirements are agreed; replay the original result for the same actor/key/request, reject key reuse with a different request. | Not implemented. This avoids silently changing repeated Cancel from conflict to success. Key scope and retention need stakeholder agreement. |
+| Decision history | Keep `decided_by` and `decided_at` on Reservation for the current one-time decision. | Matches v0.2; add append-only decision events only if retention, dispute, or multiple-decision requirements emerge. |
+| Schema changes | Keep initialization separate from migration; use versioned migrations for future data-preserving changes. | v0.2 currently has a dedicated additive script. Select and adopt a migration tool before the next schema evolution; `create_all` is not migration. |
+| Notifications | Do not add a queue or scheduler without a delivery requirement. | No delivery is implemented. If reliable notification becomes required, persist an outbox event in the reservation transaction and deliver asynchronously. |
+
+### Remaining stakeholder decisions
+
+1. Select an identity provider and derive actors from a verified server-side
+   principal; define student, administrator, and per-room approver policies.
+2. Set idempotency-key scope and retention if clients need transparent retries.
+3. Confirm the PostgreSQL clock policy and acceptable clock-skew behavior for
+   expiry reads and transitions in a multi-instance deployment.
+4. Decide whether audit retention or dispute handling requires append-only
+   decision events.
+5. Select a migration tool and define rollback expectations before the next
+   data-preserving schema change.
+6. Establish whether notifications are required and their delivery guarantees.
+
+## Historical v0.1 foundation (C01)
+
+The following sections retain the original architecture and spike notes. Where
+they differ from the C03 baseline above, the implemented v0.2 description above
+is authoritative.
 
 ## System overview
 
