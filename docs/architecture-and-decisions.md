@@ -67,6 +67,110 @@ Notification Service is not a runtime integration.
 | Database configuration | `src/database.py` creates the SQLAlchemy engine and session factory from `DATABASE_URL`; the API disposes the engine at shutdown. |
 | Database | PostgreSQL stores users, rooms, reservations, constraints, and enum types. |
 
+### AS-IS scenario trace — Confirm Reservation (OP-03)
+
+This view records the current v0.2 implementation, not the proposed logical
+architecture below.
+
+**A1 — Scenario reference**
+
+| Item | Value |
+| --- | --- |
+| Scenario / operation | [Confirm Reservation (OP-03)](baseline-v0.2.md#op-03--confirm-reservation-v02) |
+| Requirements | REQ-03, REQ-04; REQ-08 deadline semantics |
+| Rules / invariants | BR-01, BR-02, BR-04, BR-06, BR-07, BR-08, BR-10, BR-12 |
+| Baseline | v0.2 |
+
+**A2 — Main success path**
+
+| Business-significant step | Implementation location | Evidence |
+| --- | --- | --- |
+| Caller submits a reservation id to confirm | `POST /reservations/{reservation_id}/confirm` route | [`confirm_reservation()` in src/main.py](../src/main.py#L181); response is `ReservationRead` |
+| Load the reservation, serialize competing room transitions, and re-read after waiting | `lock_reservation_room()` loads the reservation, locks its Room with `with_for_update()`, then refreshes the reservation | [`lock_reservation_room()` in src/main.py](../src/main.py#L168); [test_concurrent_approved_confirms_still_exclusive()](../tests/test_approval.py#L169) |
+| Check DRAFT lifecycle, effective approval and deadline, and current room capacity | `confirm_reservation()` checks `state`, calls `effective_approval_status(models.utc_now())`, and compares attendance to room capacity | [`confirm_reservation()` in src/main.py](../src/main.py#L181); [`effective_approval_status()` in src/models.py](../src/models.py#L111); [test_deadline_boundary_on_confirm_or_approve()](../tests/test_approval.py#L83); [test_confirm_rechecks_capacity()](../tests/test_baseline.py#L159) |
+| Check there is no overlapping CONFIRMED reservation for that room | Route queries another reservation using the half-open overlap predicates | [`confirm_reservation()` in src/main.py](../src/main.py#L181); [BR-01 and BR-02](baseline-v0.1.md#shared-business-rules-and-invariants) |
+| Change lifecycle to CONFIRMED without replacing approval metadata | Route assigns `reservation.state = ReservationState.CONFIRMED` after all guards pass | [`confirm_reservation()` in src/main.py](../src/main.py#L181); [test_approval_is_permission_not_allocation()](../tests/test_approval.py#L34) |
+| Commit, refresh, and return the reservation | `save()` commits the SQLAlchemy session, refreshes the record, and the route returns it as `ReservationRead` | [`save()` and `confirm_reservation()` in src/main.py](../src/main.py#L53); [test_confirm_success_conflict_and_adjacent_interval()](../tests/test_baseline.py#L144) |
+
+**A3 — Important alternative: an overlapping confirmed booking exists**
+
+| v0.2 behavior | Where condition is detected | Where outcome is decided | Caller receives | Evidence / mismatch |
+| --- | --- | --- | --- | --- |
+| Reject confirmation with no state change | The overlap query in `confirm_reservation()` finds another CONFIRMED reservation for the same room where `existing.start_time < reservation.end_time` and `existing.end_time > reservation.start_time` | `if conflict is not None` raises HTTP 409; the request dependency rolls back on the exception | HTTP 409 with `Another confirmed reservation overlaps this room and time` | [test_confirm_success_conflict_and_adjacent_interval()](../tests/test_baseline.py#L144) checks 409 and unchanged stored rows; [test_delayed_approval_does_not_override_new_conflict()](../tests/test_approval.py#L125) checks the v0.2 approval path. No mismatch found for this branch. |
+
+The route also returns 409 for non-DRAFT or ineligible approval states, and 422
+when the current room capacity is insufficient. Those guards run before the
+overlap query and leave the reservation unchanged on rejection.
+
+**A4 — Main implementation elements**
+
+| Element (type) | Contents | Role in this scenario | Evidence |
+| --- | --- | --- | --- |
+| Confirmation orchestration (module) | `src/main.py`: `confirm_reservation`, `lock_reservation_room`, `save`, `get_db` | HTTP operation, transition checks, room serialization, state assignment, and commit are co-located; there is no separate service or repository layer | [`src/main.py`](../src/main.py#L53) |
+| Reservation and room mappings (module) | `src/models.py`: `Reservation`, `Room`, state/approval enums, `effective_approval_status`, `utc_now` | Maps persisted state and supplies the derived deadline eligibility check used by Confirm | [`src/models.py`](../src/models.py#L1) |
+| Database setup (module) | `src/database.py`: `Base`, `create_db_engine`, `create_session_factory` | Configures the SQLAlchemy engine and request-session factory used by the API | [`src/database.py`](../src/database.py#L1) |
+
+**A5 — State and rule enforcement**
+
+| Question | Answer | Evidence |
+| --- | --- | --- |
+| Where is Reservation state persisted? | PostgreSQL `reservations` table, including `state`, approval decision, and deadline fields, mapped by `Reservation`. | [`Reservation` mapping in src/models.py](../src/models.py#L69); engine configuration reads `DATABASE_URL` in [`src/database.py`](../src/database.py#L11). |
+| Which code decides and executes the transition? | `confirm_reservation()` decides eligibility and assigns `CONFIRMED`; `save()` commits and refreshes the mapped row. | [`src/main.py`](../src/main.py#L53) |
+| For BR-02, where is an overlap detected? | The Confirm route queries for another same-room CONFIRMED reservation with intersecting half-open intervals. | [`confirm_reservation()` in src/main.py](../src/main.py#L181) |
+| Where is the rejection outcome decided? | The route raises HTTP 409 when that query returns an id. The shared Room row lock serializes supported API transitions before the final checks. | [`confirm_reservation()` and `lock_reservation_room()` in src/main.py](../src/main.py#L168); [concurrent-confirm test](../tests/test_approval.py#L169) |
+| Where is the resulting state change performed? | The route assigns `ReservationState.CONFIRMED` only after lifecycle, approval, capacity, and overlap guards pass; `save()` commits it. | [`confirm_reservation()` and `save()` in src/main.py](../src/main.py#L53) |
+
+The BR-02 guarantee is implemented in the supported API transition path, not
+as a database exclusion constraint. Direct database writes can bypass the
+room-lock protocol, as BR-02's stated scope already notes.
+
+**A6 — Relevant dependencies**
+
+| Dependency | Where it connects | Code that knows its technical API | Evidence |
+| --- | --- | --- | --- |
+| PostgreSQL | Confirm reads reservation/room data, locks the Room row, checks overlaps, and commits the state | `src/main.py` uses SQLAlchemy `Session`, `select`, and `with_for_update`; `src/database.py` creates the engine from `DATABASE_URL` | [`src/main.py`](../src/main.py#L168); [`src/database.py`](../src/database.py#L11) |
+| Inbound HTTP client (Swagger/API client) | Calls `POST /reservations/{id}/confirm` and receives JSON/HTTP status | FastAPI route and Pydantic `ReservationRead` contract in `src/main.py` / `src/schemas.py` | [README v0.2 run sequence](../README.md#current-baseline-v02--approval-workflow); [`confirm_reservation()`](../src/main.py#L181) |
+| Process UTC clock | Approval eligibility is evaluated after acquiring the room lock; deadline checks compare that instant with persisted `approval_deadline` | `models.utc_now()` in `src/models.py`, called by the Confirm route | [`src/models.py`](../src/models.py#L19); [`confirm_reservation()`](../src/main.py#L181) |
+
+Confirm has no Notification Service or identity-provider call. The baseline's
+trusted demo identity assumption does not make the Confirm route authenticated;
+this operation has no actor parameter or role check.
+
+**A7 — AS-IS structural view**
+
+```mermaid
+flowchart LR
+  Caller[HTTP client / Swagger]
+  subgraph App[Application code]
+    Main["module: src/main.py<br/>Confirm guards, locks, assigns state, commits"]
+    Models["module: src/models.py<br/>Reservation and Room mappings;<br/>derived approval status"]
+    Database["module: src/database.py<br/>SQLAlchemy engine and session factory"]
+  end
+  DB[(PostgreSQL)]
+
+  Caller -->|POST confirm(id)| Main
+  Main -->|check approval; update mapped Reservation| Models
+  Main -->|create engine and session factory at startup| Database
+  Database -->|open SQLAlchemy connection| DB
+  Main -->|load; lock Room; refresh; query overlap; commit| DB
+  DB -->|committed row / query results| Main
+  Main -->|HTTP 200 ReservationRead or 409 / 422| Caller
+```
+
+This is deliberately module-level: `src/main.py` contains both the FastAPI
+adapter and confirmation orchestration and issues ORM queries directly. The
+database arrow represents SQL emitted through the request-scoped SQLAlchemy
+Session; there is no repository abstraction. The application elements are the
+three modules listed in A4.
+
+**A8 — Question for the next architecture step**
+
+| Item | Content |
+| --- | --- |
+| Question | Is the per-Room PostgreSQL row-lock protocol sufficient as the BR-02 consistency boundary, or should supported writers also be constrained by a database-level invariant? |
+| Evidence | `lock_reservation_room()` locks the Room row before Confirm's overlap query and commit; `test_concurrent_approved_confirms_still_exclusive()` verifies one success and one conflict for synchronized API requests. Direct database writes bypass this application protocol, and no exclusion constraint is defined. |
+| Why it matters | The architecture must state which writers are supported and how exclusive allocation remains true if another writer or future operation bypasses the current route. |
+
 ### Proposed logical architecture
 
 Keep one deployable FastAPI application and one PostgreSQL database, but give
