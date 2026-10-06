@@ -2,77 +2,61 @@
 
 ## Selected spike
 
-`A — Persistence`
-
-The experiment verifies:
-
-```text
-Reservation
-→ POST /reservations
-→ validate request
-→ real PostgreSQL database
-→ commit
-→ return generated ID
-→ new SQLAlchemy session
-→ load Reservation
-→ verify persisted data
-```
+**A — Persistence**
 
 ## Question / unknown
 
-Can the application persist a `DRAFT` Reservation to a real PostgreSQL
-database and load it correctly in a new SQLAlchemy session?
+Can the application persist a DRAFT Reservation in PostgreSQL and
+reload its data, including the correct User and Room references,
+in a new SQLAlchemy session?
 
-The experiment must also verify that the loaded Reservation still
-references the correct User and Room.
+## Experiment
 
-## What we did
+The spike uses PostgreSQL, SQLAlchemy 2, and psycopg 3.
 
-We configured SQLAlchemy 2 to connect to a real PostgreSQL database
-through psycopg 3.
+Implementation evidence:
 
-The executed test is:
+- `src/database.py`: database engine and session configuration.
+- `src/models.py`: User, Room, and Reservation mappings.
+- `src/main.py`: reservation creation and commit.
+- `tests/test_persistence.py`: automated persistence verification.
+
+The test:
+
+1. Creates an isolated PostgreSQL schema and the required tables.
+2. Creates and commits a User and a Room.
+3. Sends a valid request to `POST /reservations`.
+4. Checks HTTP 201, a generated identifier, and DRAFT state.
+5. Opens a new SQLAlchemy session and loads the Reservation by ID.
+6. Checks its stored fields and related User and Room.
+7. Removes the test schema and disposes the engine.
+
+The verified path is:
 
 ```text
-tests/test_persistence.py
+POST /reservations
+→ validate input
+→ persist Reservation
+→ commit to PostgreSQL
+→ return generated ID
+→ reload in a new ORM session
+→ verify fields and relationships
 ```
 
-The test performs the following steps:
+## Recorded execution
 
-1. Creates a unique PostgreSQL schema for the test run.
-2. Configures PostgreSQL to use the isolated schema.
-3. Creates User, Room, and Reservation tables.
-4. Creates and commits the required User and Room.
-5. Sends a valid request to `POST /reservations`.
-6. Verifies HTTP `201`, the generated identifier, and the `DRAFT` state.
-7. Opens a new SQLAlchemy session.
-8. Loads the Reservation using the returned identifier.
-9. Verifies the Reservation fields and its related User and Room.
-10. Removes the isolated test schema.
+Execution date: 2026-09-16.
 
-The Reservation used in the experiment contains:
+The original experiment records this environment:
 
-- A valid User reference.
-- A valid Room reference.
-- Timezone-aware start and end times.
-- A positive number of people.
-- A purpose.
-- The `DRAFT` state.
-
-## Environment
-
-The original experiment was executed with:
-
-- Python 3.13.1
-- PostgreSQL 17.2
-- SQLAlchemy 2.0.54
-- psycopg 3.3.5
-- pytest 9.1.1
-- Local test database: `study_room_c01_test`
-
-## Execution
-
-Execution date: 2026-09-16
+| Component | Version / value |
+| --- | --- |
+| Python | 3.13.1 |
+| PostgreSQL | 17.2 |
+| SQLAlchemy | 2.0.54 |
+| psycopg | 3.3.5 |
+| pytest | 9.1.1 |
+| Test database | study_room_c01_test |
 
 Command:
 
@@ -80,165 +64,93 @@ Command:
 python -m pytest tests/test_persistence.py -v
 ```
 
-## Observed result
-
-Observed output:
+Recorded result:
 
 ```text
 tests/test_persistence.py::test_reservation_persists_in_postgresql PASSED
 1 passed in 0.28s
 ```
 
-The API validated and committed the Reservation successfully and returned its
-generated identifier.
+This is the recorded C01 result, not a new execution performed during
+this documentation revision.
 
-A new SQLAlchemy session loaded the Reservation from PostgreSQL.
+## Result and interpretation
 
-The loaded record contained the expected:
+The valid request returned HTTP 201 with a generated Reservation ID
+and DRAFT state.
 
-- Reservation identifier.
-- User identifier.
-- Room identifier.
-- Start time.
-- End time.
+A new SQLAlchemy session reloaded the Reservation and verified:
+
+- Reservation ID.
+- User and Room IDs.
+- Start and end times.
 - Number of people.
 - Purpose.
-- `DRAFT` state.
+- DRAFT state.
+- Related User and Room data.
 
-The related User and Room were also loaded successfully.
+This supports the persistence path through the API and PostgreSQL,
+rather than relying on the original ORM session's cached object.
 
-This demonstrates real database persistence rather than reuse of an
-object still held by the original SQLAlchemy session.
+The test uses a new ORM session on the same database connection.
+It does not demonstrate recovery after an application or database restart.
 
-## Decision / what changes because of the result
+## Decision
 
-Retain PostgreSQL, SQLAlchemy 2, and psycopg 3 for the CP1 persistence
-path.
+Retain PostgreSQL, SQLAlchemy 2, and psycopg 3 for the project's
+persistence path.
 
-The selected stack successfully persists and loads the core Reservation
-data, including its User and Room references.
+Reuse the shared database configuration and ORM models when extending
+the application. The spike provides the persistence foundation for
+the CP1 walking skeleton; it does not establish completion of CP1.
 
-The backend can integrate the shared database configuration and models
-instead of creating a second persistence implementation.
+## Limitations
 
-The result also establishes the persistence portion of the CP1 walking
-skeleton:
+The spike covers one valid Reservation creation and reload.
 
-```text
-validate Reservation
-→ persist to PostgreSQL
-→ commit
-→ return generated Reservation identifier
-→ verify through an automated check
-```
+It does not independently verify:
 
-## Limitations of the spike
-
-This spike verifies persistence for one valid Reservation.
-
-The C01 spike does not itself verify:
-
+- Rejection of invalid requests.
+- Capacity-rule enforcement.
 - Prevention of overlapping confirmed reservations.
-- Capacity enforcement across Room and Reservation.
-- Concurrent confirmation behavior.
-- Notification Service success or failure.
-- Authentication.
-- Authorization.
-- Schema migrations.
-- Deployment or production recovery.
+- Concurrent state changes.
+- Authentication or authorization.
+- Notification delivery.
+- Schema migration.
+- Production deployment, backup, or restart recovery.
 
-These concerns require separate implementation and testing.
-
-Additional API tests may exist in the repository, but they do not
-change the selected C01 spike. The single official C01 engineering
-spike remains Persistence.
+Later tests and features provide separate evidence and do not expand
+what this C01 experiment originally demonstrated.
 
 # Change and Review Cycle
 
-## Task
+| Item | Record |
+| --- | --- |
+| Task | C01 engineering spike — PostgreSQL persistence |
+| Change author | DAT |
+| Reviewer named in the project record | Izaz |
+| Pull request | [PR #1 — C01 PostgreSQL persistence spike](https://github.com/benj1011/study-room-reservation/pull/1) |
+| Separate issue | No issue URL is recorded in this document. |
+| Integration | PR #1 was merged on 2026-09-17. |
+| Merge commit | `7bd0b30e9d1c8ecdf6fe5ae618fb9fbd2480c6e8` |
 
-Task name:
+## Review evidence
 
-```text
-C01 engineering spike
-```
+The Git history confirms the merge of PR #1 and lists
+Syed Izaz Huassain as the merge commit author.
 
-Issue:
+The available record does not establish the review comments,
+approval outcome, or whether approval occurred before integration.
+The merge alone is not treated as proof of peer review.
 
-```text
-<INSERT GITHUB ISSUE URL>
-```
+To complete the review evidence, add a link to the actual GitHub
+review or discussion and summarize its outcome.
 
-## Change author
+# Evolution After C01
 
-```text
-<AUTHOR NAME>
-```
+Subsequent work extended the application with room availability,
+reservation confirmation and cancellation, browser pages, and
+additional validation and concurrency checks.
 
-The author implemented the PostgreSQL persistence configuration, ORM
-models, persistence test, and supporting documentation.
-
-## Reviewer
-
-```text
-<REVIEWER NAME>
-```
-
-The reviewer must be a different team member from the change author.
-
-## Pull request
-
-```text
-https://github.com/benj1011/study-room-reservation/pull/1
-```
-
-If Pull Request #1 was not reviewed by another team member before it
-was merged, replace the link above with the URL of a new Pull Request
-that completes a real review cycle.
-
-## Review result
-
-```text
-<REPLACE WITH THE REAL REVIEW RESULT>
-```
-
-Example, only if it actually happened:
-
-```text
-The reviewer checked the persistence test, database configuration,
-credential handling, test isolation, and documentation. The reviewer
-approved the change before integration.
-```
-
-## Integration
-
-The reviewed change was merged into the shared `main` branch.
-
-Merge commit for Pull Request #1:
-
-```text
-7bd0b30e9d1c8ecdf6fe5ae618fb9fbd2480c6e8
-```
-
-This section is complete only when the repository contains evidence
-that another team member reviewed the change before integration.
-
-# Evolution After the Spike
-
-After the persistence spike, the project added an integrated FastAPI
-backend and browser frontend.
-
-The backend now includes:
-
-- Reservation creation.
-- Room availability.
-- User-based reservation filtering.
-- Reservation confirmation.
-- Reservation cancellation.
-- Capacity validation.
-- Overlap checking.
-- PostgreSQL row locking for state changes.
-- Explicit HTTP error responses.
-
-These additions build on the database configuration and models selected
-by the C01 persistence spike.
+These changes build on the persistence foundation established by C01.
+Their behavior and verification belong to the later baseline documents.
