@@ -154,3 +154,59 @@ additional validation and concurrency checks.
 
 These changes build on the persistence foundation established by C01.
 Their behavior and verification belong to the later baseline documents.
+
+## C03 — Architecture Evidence
+
+**Baseline:** v0.2
+
+**Part A:** Existing implementation map and Confirm trace in
+[architecture-and-decisions.md](architecture-and-decisions.md#c03-architecture-baseline).
+
+**Drivers:** Exclusive allocation under contention; assigned-approver
+authorization; deadline correctness; notification failure semantics.
+
+**Decision question:** Where should the authoritative Confirm decision be
+enforced so BR-02 remains true for competing reservation requests?
+
+**Alternatives:** Per-Room application transaction/row lock (selected) versus
+a PostgreSQL exclusion constraint. See the comparison and concurrent scenario
+walkthrough in [c03-architecture.md](c03-architecture.md).
+
+**ADR:** ADR-01 selects the existing lock-refresh-commit protocol for supported
+API writers. Direct database writers remain outside that guarantee.
+
+**Views:** Domain class model, system context, logical architecture, state
+transition ownership, runtime mapping, concurrent Confirm sequence, and
+focused design class diagram are in [c03-architecture.md](c03-architecture.md).
+
+**Cross-view issues found/resolved:** The existing code co-locates HTTP
+handlers and reservation operations in `src/main.py`; the design labels them
+as separate logical responsibilities without claiming separate packages or
+processes. The database row-lock guarantee is explicitly limited to supported
+API writers.
+
+**AS-IS → TO-BE delta:** Lifecycle ownership, shared transition locking,
+PostgreSQL persistence, and derived expiry are KEEP; lifecycle assignment
+ownership is VERIFY. No application behavior change was required.
+
+**Implementation changes:** Added
+`tests/test_architecture.py`, an AST-based ownership check; linked the C03
+design from README. No application code was refactored.
+
+**Behavior verification:** The recorded v0.2 PostgreSQL suite reports 55
+passed and 2 warnings on 2026-09-28. This historical suite was not rerun for
+the C03 documentation/test change. The architecture check result is recorded
+in [c03-architecture.md](c03-architecture.md#l2-architecture-conformance).
+
+**Architecture conformance rule:** Only Confirm and Cancel may assign the
+lifecycle state of an existing reservation; creation initializes DRAFT.
+**Check:** `tests/test_architecture.py`.
+**Result:** 1 passed.
+
+**Remaining uncertainty / risk:** `X-User-Id` is not authenticated;
+multi-instance clock policy is open; direct database writers can bypass the
+row lock; notification requirements and production deployment policy are
+unresolved.
+
+**Commit/tag:** `c265c90ad4dbd34635c5bef6d7fc39c561013a57` — C03 architecture
+design, evidence, and conformance test.
