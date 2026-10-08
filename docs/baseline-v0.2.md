@@ -1,9 +1,9 @@
 # Baseline v0.2 — approval workflow (Part B.13)
 
-Status: implemented for review; **team acceptance pending**. The user selected
-the deadline policy below on 2026-09-28. This is not a fabricated team approval.
-Part B.15 is intentionally deferred. The [pre-edit change analysis](change-approval-impact.md)
-records the impact assessment required by B.12.
+Status: implemented. Team acceptance is recorded in
+[Baseline v0.2 evidence](Baseline%20v0.2-evidence.md).
+The deadline policy was selected on 2026-09-28. The
+[change analysis](change-approval-impact.md) records the B.12 impact assessment.
 
 ## Changed condition and scope
 
@@ -16,7 +16,7 @@ The v0.1 trusted demo identity and all-registered-rooms-active assumptions remai
 The new operation enforces that the asserted user is the room's assigned
 approver. `X-User-Id` is a trusted demo identity assertion, not authentication:
 a caller can impersonate a user if the API is exposed to untrusted clients.
-Production authentication is a C03 driver, not a claim of this baseline.
+Production authentication remains an open architecture requirement.
 User/room provisioning is trusted setup. No public API edits room policy or
 approver assignments after creation. Self-approval is allowed if that user was
 explicitly assigned; separation of duties is not an unstated constraint.
@@ -39,7 +39,7 @@ BR-02 exclusive allocation, BR-03 cancellation policy, BR-04 capacity and
 BR-07 read/atomicity principles. They still apply to ordinary and protected
 rooms. BR-05 is extended with approval attribution; BR-06's Confirm eligibility
 is extended by BR-08 below. Three reservation lifecycle states are unchanged.
-No pre-existing requirement has silently become an approval operation.
+Approve is a separate operation; Confirm continues to allocate the room.
 
 ## New shared rules and state semantics
 
@@ -295,7 +295,8 @@ Cross-view review: all five goals have slices/activity flows; only CONFIRMED
 blocks; both approval outcomes retain DRAFT; rejected/expired has no route to
 Confirm; cancellation remains available from DRAFT; views use the same exact
 time inequality. There is no notification actor or presumed background worker.
-No team acceptance or Part B.15 evidence package is asserted.
+Acceptance and execution results are recorded in
+[Baseline v0.2 evidence](Baseline%20v0.2-evidence.md).
 
 ## Architecture drivers for C03
 

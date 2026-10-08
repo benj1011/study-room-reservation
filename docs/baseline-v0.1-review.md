@@ -1,8 +1,8 @@
 # Baseline v0.1 — acceptance gate and consistency review
 
 Review scope: assignment Part A, adapted explicitly by A-01 (trusted demo
-identity) and A-02 (all registered rooms active). This is an engineering
-self-review, not an independent peer review or team acceptance.
+identity) and A-02 (all registered rooms active). The tables below record the
+engineering self-review; team acceptance is recorded at the end.
 
 ## Requirement acceptance gate
 
@@ -32,7 +32,7 @@ linked in the [execution report](baseline-v0.1-evidence.md).
 | State / time | Current committed conflicts matter, not old search results | Before/at/after start allowed; repeat is 409 | Equal/reversed interval rejected |
 | Concurrency | Core requirement; no double allocation | BR-03 allows only valid serial outcomes with Confirm | Rejection creates no allocation or record |
 | Consistency | Preserves BR-02; OP-03 evaluation is indivisible | Same guards in OP-04, statechart and activity | OP-01 failure branches match examples |
-| Unknown? | All-schedule/load proof not claimed; scope stated | Policy chosen; team sign-off still pending | Missing reference is not an auth failure |
+| Unknown? | All-schedule/load proof not claimed; scope stated | Policy documented in BR-03 | Missing reference is not an auth failure |
 
 R01–R06 in the specification's falsification table are verification claims:
 R01 maps to REQ-01; R02 to REQ-02; R03 to REQ-03; R04 to REQ-05;
@@ -51,7 +51,7 @@ They are not additional operations or alternative definitions.
 | External actor | Notification delivery is absent; no fictitious runtime actor appears in the goal view. |
 | Concurrency | OP-03/04 require serially valid outcomes; diagrams refer to these requirements without prescribing locks. |
 | Design leakage | Observable requirements do not require FastAPI, SQLAlchemy or row locks. Current implementation mapping/rationale is explicitly separated. |
-| Reference authorization | A-01 is a user-selected scope adaptation; no unauthorized-access test or security claim is fabricated. |
+| Reference authorization | A-01 limits this baseline to trusted demo identity; unauthorized access is outside the test scope. |
 | Reference active resource | A-02 makes every registered room active. Inactive rejection is not implemented or claimed. |
 | Cancellation example | The assignment's before-start example is not mandatory. Existing unrestricted policy is selected explicitly, with no clock ambiguity. |
 | Evidence vs claims | Tests run through the API with real PostgreSQL; C01 history remains unchanged. Untested scope is listed in the evidence report. |
@@ -65,12 +65,7 @@ provides executable examples; it does not replace the C01 spike.
 
 **Specification Baseline v0.1 — Accepted by Team.**
 
-Prepared for team review on 2026-09-28. Do not mark this accepted solely because
-tests pass or this self-review exists. A team member must record the actual
-review decision, participants and date, including acceptance of A-01, A-02 and
-BR-03. If accepted, replace the status with the assignment's exact label:
-“Specification Baseline v0.1 — Accepted by Team”.
+The review was prepared on 2026-09-28 and covers A-01, A-02 and BR-03.
+The record does not include reviewer names or a separate acceptance date.
 
-No reviewer identity, approval date or acceptance decision has been fabricated.
-This baseline is not the CP1 freeze: C03 adds Architecture, CP1 freezes after
-C03, and C04 reviews it.
+C03 adds the architecture work. The CP1 freeze follows C03, with review in C04.

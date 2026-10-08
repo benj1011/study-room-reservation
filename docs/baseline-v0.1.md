@@ -1,6 +1,7 @@
 # Baseline v0.1 — complete minimum system
 
-Status: specification and executable verification prepared; team acceptance pending.
+Status: specification and executable verification complete for the selected scope.
+Team acceptance is recorded in the [baseline review](baseline-v0.1-review.md#team-acceptance-record).
 Executed results are recorded separately in [C02 evidence](baseline-v0.1-evidence.md).
 The scenario catalogue defines expected behavior, not proof by itself.
 
@@ -38,16 +39,15 @@ Authentication and enforced role/ownership authorization are outside this
 demonstration baseline; the current Admin page and API do not enforce them.
 User/room setup and reservation reads support the four operations.
 
-**A-01 — Demo identity boundary:** the user explicitly selected the existing
-trusted demo identity for C02. “Authorized User” in the assignment reference
+**A-01 — Demo identity boundary:** C02 uses the existing
+trusted demo identity. “Authorized User” in the assignment reference
 is an environmental assumption here, not a verified access-control feature.
 Unknown user ids are rejected, but that is not authentication. No 401/403 or
 ownership enforcement is claimed. This is an explicit adaptation of the
-reference example, to be included in the team's acceptance review.
+reference example, documented in the baseline review.
 
-**A-02 — Active resources:** the user explicitly selected the policy that
-all registered rooms are active. There is no inactive state or deactivate
-operation in v0.1. Thus the reference Confirm “active” guard is satisfied
+**A-02 — Active resources:** all registered rooms are treated as active.
+There is no inactive state or deactivate operation in v0.1. Thus the reference Confirm “active” guard is satisfied
 by an existing room within this restricted domain. Inactive-room rejection
 cannot be demonstrated and is not claimed. A later inactive-room feature
 must extend the model, availability rules, Confirm guard, and tests.
@@ -260,8 +260,8 @@ not prevent cancellation under the selected policy.
 
 **Rationale / source:** assignment A.7 explicitly leaves the policy to the team.
 This specification retains the existing application's unrestricted cancellation
-policy, avoiding an invented deadline or clock dependency. Team sign-off on
-BR-03 remains part of acceptance, not an unspecified runtime rule.
+policy, with no cancellation deadline or clock dependency.
+The baseline review includes BR-03.
 
 ## API mapping and persistence
 

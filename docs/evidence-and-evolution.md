@@ -139,12 +139,8 @@ what this C01 experiment originally demonstrated.
 The Git history confirms the merge of PR #1 and lists
 Syed Izaz Huassain as the merge commit author.
 
-The available record does not establish the review comments,
-approval outcome, or whether approval occurred before integration.
-The merge alone is not treated as proof of peer review.
-
-To complete the review evidence, add a link to the actual GitHub
-review or discussion and summarize its outcome.
+Review comments and an approval outcome are not linked in this record.
+The merge date is recorded, but the timing of any approval is unknown.
 
 # Evolution After C01
 
@@ -181,8 +177,7 @@ focused design class diagram are in [c03-architecture.md](c03-architecture.md).
 
 **Cross-view issues found/resolved:** The existing code co-locates HTTP
 handlers and reservation operations in `src/main.py`; the design labels them
-as separate logical responsibilities without claiming separate packages or
-processes. The database row-lock guarantee is explicitly limited to supported
+as separate logical responsibilities within the same module and process. The database row-lock guarantee is explicitly limited to supported
 API writers.
 
 **AS-IS → TO-BE delta:** Lifecycle ownership, shared transition locking,

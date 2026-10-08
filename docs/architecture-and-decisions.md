@@ -2,15 +2,10 @@
 
 ## C03 Architecture Baseline
 
-This architecture view describes the implemented v0.2 baseline and its C03
-drivers. It is prepared for review; it does not claim team acceptance, a CP1
-freeze, or production readiness. Historical v0.1 notes are retained below.
-
-The C01 persistence spike and C02 behavior evidence are inputs to this design.
-The repository still contains placeholders for the C01 reviewer and review
-result, and its baseline documents say team acceptance is pending. This
-architecture therefore does not claim that those human gates or the CP1 freeze
-are complete.
+This document maps the implemented v0.2 baseline and the architecture drivers
+carried into C03. It uses the C01 persistence spike and C02 behavior evidence.
+Historical v0.1 notes are retained below. The Part B design and ADR are in
+[C03 Architecture Design](c03-architecture.md).
 
 ### Scope and drivers
 

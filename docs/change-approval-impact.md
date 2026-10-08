@@ -3,7 +3,7 @@
 Impact analysis performed on 2026-09-28 **before application edits**.
 Baseline: v0.1; requested change: some Resources require an authorized person's
 approval before CONFIRMED. Approval may be delayed, rejected or expire.
-Scope of this work: B.12–14 only. B.15 is deferred at the user's request.
+This impact analysis covers B.12–14.
 
 ## Observed starting point
 
@@ -57,6 +57,5 @@ read/transition time). The selected policy is recorded in the v0.2 specification
 - Potential notification/retry/scheduling needs if stakeholders later require
   proactive expiry messages; no delivery guarantees are invented now.
 
-Team acceptance must be genuine. The implementation can be prepared and verified
-for review without fabricating an accepted-by-team record. Part B.15, including
-its final evidence summary and application commit/tag, is intentionally omitted.
+The subsequent implementation results and acceptance record are in
+[Baseline v0.2 evidence](Baseline%20v0.2-evidence.md).

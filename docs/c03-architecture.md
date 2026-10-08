@@ -4,8 +4,9 @@ This document records the architecture work that follows the Part A
 implementation map in
 [Architecture and Decisions](architecture-and-decisions.md#c03-architecture-baseline).
 It uses the v0.2 specification, its C02 behavior evidence, and the implemented
-Confirm Reservation (OP-03) path. The design is a review proposal; it does not
-claim team acceptance or production readiness.
+Confirm Reservation (OP-03) path.
+
+Status: architecture proposal awaiting team review.
 
 ## B. Architecture drivers
 
@@ -202,9 +203,9 @@ flowchart LR
 
 ## G2. TO-BE logical architecture
 
-The selected design remains one deployable with logical ownership boundaries;
-it does not claim that these are already separate Python packages. The ADR
-decision is visible in the transaction/row-lock owner.
+The selected design uses one deployable. The elements below group logical
+responsibilities within the existing Python modules. The transaction/row-lock
+owner implements the ADR decision.
 
 ```mermaid
 flowchart LR
@@ -408,12 +409,12 @@ classDiagram
 | Durable state / persistence | SQLAlchemy session and PostgreSQL persist reservation and approval state. | Same database and transaction boundary. | KEEP |
 | Approval eligibility | `Reservation.effective_approval_status(now)` derives EXPIRED from the deadline. | Preserve on-demand expiry; no worker is required. | KEEP |
 | Direct state-mutation ownership | Existing code places persisted lifecycle assignments in Confirm and Cancel; Create initializes DRAFT. | Only Confirm and Cancel may mutate an existing reservation lifecycle in application code. | VERIFY |
-| Identity and time | Demo `X-User-Id`; process-local UTC clock. | Explicit limits remain; production identity and multi-host clock source are open decisions, not silently solved by this task. | VERIFY |
+| Identity and time | Demo `X-User-Id`; process-local UTC clock. | Production identity and the multi-host clock source remain open decisions. | VERIFY |
 
 No application refactor is required by this decision: the selected logical
 owners and transaction protocol already match the supported API implementation.
-The one VERIFY row is protected by the repeatable check below. This avoids
-rewriting code solely to create new package names.
+The lifecycle-ownership VERIFY row is checked by the architecture test below.
+Identity and clock limitations remain documented as open decisions.
 
 ## K. Implementation changes
 
@@ -431,8 +432,7 @@ rewriting code solely to create new package names.
 | Recheck conflict after delayed approval | Passed in the recorded v0.2 suite; not rerun during this documentation/test-only change. | `test_delayed_approval_does_not_override_new_conflict` in `tests/test_approval.py`. |
 
 The repository's recorded v0.2 run reports 55 passed and 2 warnings on
-2026-09-28. This is historical evidence, not a claim that the PostgreSQL suite
-was rerun for this change.
+2026-09-28. The PostgreSQL suite was not rerun for this C03 change.
 
 ## L2. Architecture conformance
 

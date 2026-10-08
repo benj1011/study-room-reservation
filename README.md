@@ -39,8 +39,9 @@ Part B.12–14 adds approval-required rooms and an assigned Approver. See:
 - [C03 architecture baseline and open decisions](docs/architecture-and-decisions.md#c03-architecture-baseline)
 - [C03 architecture design and evidence](docs/c03-architecture.md)
 
-Part B.15 is deferred. Team acceptance is pending; this is the implemented
-baseline prepared for review. The complete v0.2 interface is API/Swagger.
+The v0.2 acceptance and test results are recorded in
+[Baseline v0.2 evidence](docs/Baseline%20v0.2-evidence.md).
+The complete v0.2 interface is API/Swagger.
 The existing browser pages remain a v0.1 demonstration and have no Approve UI.
 
 After activating `.venv` and configuring `DATABASE_URL` as below:
@@ -80,7 +81,7 @@ The deadline is the earlier of Create + 24 hours and the reservation start.
 At/after the deadline, pending or approved drafts report EXPIRED and cannot
 confirm. Expiry is computed on read/validation; there is no background service.
 `X-User-Id` is a trusted demo assertion, not secure authentication. The assigned
-user check is implemented; production identity integration is deferred to C03.
+user check is implemented; production identity integration remains open.
 
 Run v0.2 and ordinary-room regression checks against a configured test database:
 
@@ -110,7 +111,8 @@ Part A artifacts:
 The selected scope retains trusted demo identity and treats every registered
 room as active. Cancellation has no time cutoff; repeated cancellation is a
 conflict. These are explicit scope/policy decisions, not authentication or
-inactive-room functionality. Team acceptance is pending.
+inactive-room functionality. See the
+[baseline review](docs/baseline-v0.1-review.md#team-acceptance-record) for acceptance status.
 
 Run the separate C02 suite against a configured PostgreSQL test database:
 
@@ -338,6 +340,7 @@ local timezone, are sent as UTC ISO timestamps, and are displayed in local time.
 - `GET /rooms/available?start_time=<ISO with timezone>&end_time=<ISO with timezone>&people=4`
 - `GET /reservations` (all), `GET /reservations?user_id=1` (filtered)
 - `GET /reservations/{id}`, `POST /reservations`
+- `POST /reservations/{id}/approve` (assigned approver, using `X-User-Id`)
 - `POST /reservations/{id}/confirm`
 - `POST /reservations/{id}/cancel` (`PATCH` remains a compatibility alias)
 

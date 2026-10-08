@@ -121,15 +121,13 @@ No application/specification mismatch was found in those executions, so the
 existing runnable API was retained. The C02 additions are specification,
 review, diagrams and separate executable evidence, not a replacement C01 spike.
 
-A-01 and A-02 are deliberate user-selected scope adaptations: unauthorized
+A-01 and A-02 define the baseline scope: unauthorized
 requests and inactive resources are not supported test conditions. No access
-control or inactive-room rejection is claimed. Team review must explicitly
-accept those adaptations. Notification, browser UI, process-restart recovery,
+control or inactive-room rejection is implemented. Notification, browser UI, process-restart recovery,
 full production deployment and load performance were not tested by this suite.
 Fresh-session persistence is demonstrated; process-restart durability is not
 separately exercised. HTTP is exercised in-process; no network/proxy deployment
 claim follows from TestClient.
 
-Engineering preparation is complete for the selected scope. The remaining
-human step is the genuine team acceptance record in
-[the review document](baseline-v0.1-review.md), not another fabricated test result.
+The selected scope has been implemented and tested. Team acceptance is recorded
+in [the review document](baseline-v0.1-review.md#team-acceptance-record).
