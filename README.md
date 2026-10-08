@@ -37,6 +37,7 @@ Part B.12–14 adds approval-required rooms and an assigned Approver. See:
 - [v0.2 specification and five full slices](docs/baseline-v0.2.md)
 - [Updated actor, lifecycle, approval and activity views](docs/baseline-v0.2-diagrams.md)
 - [C03 architecture baseline and open decisions](docs/architecture-and-decisions.md#c03-architecture-baseline)
+- [C03 architecture design and evidence](docs/c03-architecture.md)
 
 Part B.15 is deferred. Team acceptance is pending; this is the implemented
 baseline prepared for review. The complete v0.2 interface is API/Swagger.
