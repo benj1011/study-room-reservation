@@ -208,5 +208,5 @@ multi-instance clock policy is open; direct database writers can bypass the
 row lock; notification requirements and production deployment policy are
 unresolved.
 
-**Commit/tag:** Not created in this work; record it after branch review and
-commit.
+**Commit/tag:** `c265c90ad4dbd34635c5bef6d7fc39c561013a57` — C03 architecture
+design, evidence, and conformance test.

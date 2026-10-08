@@ -455,5 +455,6 @@ Remaining risks are trusted demo identity, process-local clock consistency,
 unsupported direct database writers, unknown production deployment
 requirements, and unresolved notification delivery requirements.
 
-**Commit/tag:** Not created as part of this work; record the exact commit or
-tag after the team reviews and commits the branch.
+**Commit/tag:** `c265c90ad4dbd34635c5bef6d7fc39c561013a57` — C03 architecture
+design, evidence, and conformance test. This evidence reference is recorded in
+a follow-up documentation commit.
