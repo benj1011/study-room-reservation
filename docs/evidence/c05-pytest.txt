@@ -1,0 +1,87 @@
+============================= test session starts ==============================
+platform darwin -- Python 3.13.1, pytest-9.1.1, pluggy-1.6.0 -- /Users/dat.pham/Documents/winter-semeter(26-27)/SWE/SWE-CD01/room_booking/study-room-reservation/.venv/bin/python
+cachedir: .pytest_cache
+rootdir: /Users/dat.pham/Documents/winter-semeter(26-27)/SWE/SWE-CD01/room_booking/study-room-reservation
+plugins: anyio-4.15.1
+collecting ... collected 68 items
+
+tests/test_approval.py::test_approval_is_permission_not_allocation PASSED [  1%]
+tests/test_approval.py::test_only_assigned_approver_can_decide[missing-401] PASSED [  2%]
+tests/test_approval.py::test_only_assigned_approver_can_decide[wrong-403] PASSED [  4%]
+tests/test_approval.py::test_only_assigned_approver_can_decide[unknown-403] PASSED [  5%]
+tests/test_approval.py::test_reject_cannot_confirm_but_can_cancel PASSED [  7%]
+tests/test_approval.py::test_deadline_boundary_on_confirm_or_approve[-1-200-False] PASSED [  8%]
+tests/test_approval.py::test_deadline_boundary_on_confirm_or_approve[-1-200-True] PASSED [ 10%]
+tests/test_approval.py::test_deadline_boundary_on_confirm_or_approve[0-409-False] PASSED [ 11%]
+tests/test_approval.py::test_deadline_boundary_on_confirm_or_approve[0-409-True] PASSED [ 13%]
+tests/test_approval.py::test_deadline_boundary_on_confirm_or_approve[1-409-False] PASSED [ 14%]
+tests/test_approval.py::test_deadline_boundary_on_confirm_or_approve[1-409-True] PASSED [ 16%]
+tests/test_approval.py::test_deadline_minimum_and_protected_past_start PASSED [ 17%]
+tests/test_approval.py::test_confirmed_allocation_survives_approval_deadline PASSED [ 19%]
+tests/test_approval.py::test_delayed_approval_does_not_override_new_conflict PASSED [ 20%]
+tests/test_approval.py::test_cancel_approval_states_prevents_later_decisions[PENDING] PASSED [ 22%]
+tests/test_approval.py::test_cancel_approval_states_prevents_later_decisions[APPROVED] PASSED [ 23%]
+tests/test_approval.py::test_cancel_approval_states_prevents_later_decisions[EXPIRED] PASSED [ 25%]
+tests/test_approval.py::test_repeated_decision_and_invalid_input PASSED  [ 26%]
+tests/test_approval.py::test_room_policy_validation PASSED               [ 27%]
+tests/test_approval.py::test_concurrent_approved_confirms_still_exclusive PASSED [ 29%]
+tests/test_approval.py::test_approval_races[cancel] PASSED               [ 30%]
+tests/test_approval.py::test_approval_races[confirm] PASSED              [ 32%]
+tests/test_approval.py::test_approval_races[reject] PASSED               [ 33%]
+tests/test_approval.py::test_migration_preserves_v01_records_and_is_repeatable PASSED [ 35%]
+tests/test_approval.py::test_client_cannot_supply_its_own_approval PASSED [ 36%]
+tests/test_approval.py::test_expiry_is_read_only_and_does_not_block_room PASSED [ 38%]
+tests/test_approval.py::test_confirm_evaluates_deadline_after_room_lock PASSED [ 39%]
+tests/test_architecture.py::test_only_confirm_and_cancel_assign_existing_reservation_state PASSED [ 41%]
+tests/test_baseline.py::test_create_durable_draft_without_allocation PASSED [ 42%]
+tests/test_baseline.py::test_create_rejection_has_no_write[changes0-422] PASSED [ 44%]
+tests/test_baseline.py::test_create_rejection_has_no_write[changes1-422] PASSED [ 45%]
+tests/test_baseline.py::test_create_rejection_has_no_write[changes2-422] PASSED [ 47%]
+tests/test_baseline.py::test_create_rejection_has_no_write[changes3-422] PASSED [ 48%]
+tests/test_baseline.py::test_create_rejection_has_no_write[changes4-422] PASSED [ 50%]
+tests/test_baseline.py::test_create_rejection_has_no_write[changes5-422] PASSED [ 51%]
+tests/test_baseline.py::test_create_rejection_has_no_write[changes6-422] PASSED [ 52%]
+tests/test_baseline.py::test_create_rejection_has_no_write[changes7-404] PASSED [ 54%]
+tests/test_baseline.py::test_create_rejection_has_no_write[changes8-404] PASSED [ 55%]
+tests/test_baseline.py::test_availability_boundaries_blocking_and_capacity PASSED [ 57%]
+tests/test_baseline.py::test_availability_invalid_query[10:00-10:00-1] PASSED [ 58%]
+tests/test_baseline.py::test_availability_invalid_query[11:00-10:00-1] PASSED [ 60%]
+tests/test_baseline.py::test_availability_invalid_query[10:00-11:00-0] PASSED [ 61%]
+tests/test_baseline.py::test_confirm_success_conflict_and_adjacent_interval PASSED [ 63%]
+tests/test_baseline.py::test_confirm_rechecks_capacity PASSED            [ 64%]
+tests/test_baseline.py::test_confirm_invalid_source_state[CONFIRMED] PASSED [ 66%]
+tests/test_baseline.py::test_confirm_invalid_source_state[CANCELLED] PASSED [ 67%]
+tests/test_baseline.py::test_cancel_retains_details_releases_allocation_and_rejects_repeat[False] PASSED [ 69%]
+tests/test_baseline.py::test_cancel_retains_details_releases_allocation_and_rejects_repeat[True] PASSED [ 70%]
+tests/test_baseline.py::test_missing_reservation[confirm] PASSED         [ 72%]
+tests/test_baseline.py::test_missing_reservation[cancel] PASSED          [ 73%]
+tests/test_baseline.py::test_concurrent_confirms_allocate_at_most_once[0] PASSED [ 75%]
+tests/test_baseline.py::test_concurrent_confirms_allocate_at_most_once[1] PASSED [ 76%]
+tests/test_baseline.py::test_concurrent_confirms_allocate_at_most_once[2] PASSED [ 77%]
+tests/test_baseline.py::test_concurrent_confirm_cancel_never_resurrects[0] PASSED [ 79%]
+tests/test_baseline.py::test_concurrent_confirm_cancel_never_resurrects[1] PASSED [ 80%]
+tests/test_baseline.py::test_concurrent_confirm_cancel_never_resurrects[2] PASSED [ 82%]
+tests/test_baseline.py::test_cancel_past_interval_has_no_deadline PASSED [ 83%]
+tests/test_detailed_design.py::test_effective_expiry_is_a_pure_boundary_query[-1-PENDING] PASSED [ 85%]
+tests/test_detailed_design.py::test_effective_expiry_is_a_pure_boundary_query[-1-APPROVED] PASSED [ 86%]
+tests/test_detailed_design.py::test_effective_expiry_is_a_pure_boundary_query[0-PENDING] PASSED [ 88%]
+tests/test_detailed_design.py::test_effective_expiry_is_a_pure_boundary_query[0-APPROVED] PASSED [ 89%]
+tests/test_detailed_design.py::test_effective_expiry_is_a_pure_boundary_query[1-PENDING] PASSED [ 91%]
+tests/test_detailed_design.py::test_effective_expiry_is_a_pure_boundary_query[1-APPROVED] PASSED [ 92%]
+tests/test_detailed_design.py::test_expiry_does_not_rewrite_terminal_lifecycle[CONFIRMED] PASSED [ 94%]
+tests/test_detailed_design.py::test_expiry_does_not_rewrite_terminal_lifecycle[CANCELLED] PASSED [ 95%]
+tests/test_detailed_design.py::test_non_expiring_decisions_are_preserved[NOT_REQUIRED] PASSED [ 97%]
+tests/test_detailed_design.py::test_non_expiring_decisions_are_preserved[REJECTED] PASSED [ 98%]
+tests/test_persistence.py::test_reservation_persists_in_postgresql PASSED [100%]
+
+=============================== warnings summary ===============================
+.venv/lib/python3.13/site-packages/fastapi/testclient.py:1
+  /Users/dat.pham/Documents/winter-semeter(26-27)/SWE/SWE-CD01/room_booking/study-room-reservation/.venv/lib/python3.13/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+.venv/lib/python3.13/site-packages/starlette/testclient.py:53
+  /Users/dat.pham/Documents/winter-semeter(26-27)/SWE/SWE-CD01/room_booking/study-room-reservation/.venv/lib/python3.13/site-packages/starlette/testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+======================== 68 passed, 2 warnings in 2.38s ========================

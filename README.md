@@ -1,5 +1,23 @@
 # Study Room Reservation System
 
+## Documentation
+
+The project maintains three documents across C01, C02, C03a, C03b and C05:
+
+- [Intent and change](docs/intent-and-change.md): requirements, rules, scenarios and baseline changes.
+- [Architecture and decisions](docs/architecture-and-decisions.md): architecture, ADRs and design.
+- [Evidence and evolution](docs/evidence-and-evolution.md): verification, reviews and milestone history.
+
+Historical sections are retained and labelled; raw test output and hash manifests remain in `docs/evidence/`.
+
+## C05 — Detailed Design
+
+Confirm Reservation (OP-03) is the selected detailed-design unit.
+
+- [Design, contracts, UML and algorithm](docs/architecture-and-decisions.md#c05-detailed-design).
+- [DD-derived tests, consistency review and execution evidence](docs/evidence-and-evolution.md#c05-verification).
+- Delivery tag: `c05-detailed-design`; recorded full-suite result: **68 passed, 2 warnings**.
+
 ## Team
 
 Team name: Study Room Reservation Team
@@ -33,14 +51,14 @@ delivery is outside the C01 implementation scope.
 
 Part B.12–14 adds approval-required rooms and an assigned Approver. See:
 
-- [Pre-edit impact analysis / change card](docs/change-approval-impact.md)
-- [v0.2 specification and five full slices](docs/baseline-v0.2.md)
-- [Updated actor, lifecycle, approval and activity views](docs/baseline-v0.2-diagrams.md)
-- [C03 architecture baseline and open decisions](docs/architecture-and-decisions.md#c03-architecture-baseline)
-- [C03 architecture design and evidence](docs/c03-architecture.md)
+- [Pre-edit impact analysis / change card](docs/intent-and-change.md#c02-change)
+- [v0.2 specification and five full slices](docs/intent-and-change.md#c02-v02)
+- [Updated actor, lifecycle, approval and activity views](docs/intent-and-change.md#c02-v02-views)
+- [C03 architecture baseline and open decisions](docs/architecture-and-decisions.md#c03a-c03-architecture-baseline)
+- [C03 architecture design and evidence](docs/architecture-and-decisions.md#c03b)
 
 The v0.2 acceptance and test results are recorded in
-[Baseline v0.2 evidence](docs/Baseline%20v0.2-evidence.md).
+[Baseline v0.2 evidence](docs/evidence-and-evolution.md#c02-v02-evidence).
 The complete v0.2 interface is API/Swagger.
 The existing browser pages remain a v0.1 demonstration and have no Approve UI.
 
@@ -95,7 +113,7 @@ wait is needed.
 
 ## Historical baseline v0.1 — minimum system specification
 
-[Baseline v0.1](docs/baseline-v0.1.md) defines the four core operations:
+[Baseline v0.1](docs/intent-and-change.md#c02-v01) defines the four core operations:
 Create Reservation, Check Availability, Confirm Reservation, and Cancel
 Reservation. Create stores a DRAFT without allocating a room; Confirm allocates
 it; Cancel retains the record and releases any allocation. The baseline has
@@ -103,16 +121,16 @@ no approval workflow.
 
 Part A artifacts:
 
-- [Four full operation slices and shared rules](docs/baseline-v0.1.md)
-- [Actor-goal, lifecycle and four activity diagrams](docs/baseline-v0.1-diagrams.md)
-- [Requirement gate, consistency review and team sign-off](docs/baseline-v0.1-review.md)
-- [C02 execution evidence and coverage](docs/baseline-v0.1-evidence.md)
+- [Four full operation slices and shared rules](docs/intent-and-change.md#c02-v01)
+- [Actor-goal, lifecycle and four activity diagrams](docs/intent-and-change.md#c02-v01-views)
+- [Requirement gate, consistency review and team sign-off](docs/evidence-and-evolution.md#c02-v01-review)
+- [C02 execution evidence and coverage](docs/evidence-and-evolution.md#c02-v01-evidence)
 
 The selected scope retains trusted demo identity and treats every registered
 room as active. Cancellation has no time cutoff; repeated cancellation is a
 conflict. These are explicit scope/policy decisions, not authentication or
 inactive-room functionality. See the
-[baseline review](docs/baseline-v0.1-review.md#team-acceptance-record) for acceptance status.
+[baseline review](docs/evidence-and-evolution.md#c02-v01-review-team-acceptance-record) for acceptance status.
 
 Run the separate C02 suite against a configured PostgreSQL test database:
 
@@ -239,8 +257,8 @@ deactivate
 
 See:
 
-- [Spike evidence](docs/evidence-and-evolution.md)
-- [Persistence decisions](docs/architecture-and-decisions.md)
+- [Spike evidence](docs/evidence-and-evolution.md#milestone-evidence)
+- [Persistence decisions](docs/architecture-and-decisions.md#c03a)
 
 ## CP1 walking skeleton
 
@@ -364,5 +382,5 @@ The test uses real PostgreSQL, creates a uniquely named schema, sends a request
 to the reservation API, reloads the saved Reservation in a new session, and
 removes the schema afterwards.
 
-See [architecture and decisions](docs/architecture-and-decisions.md) for the
+See [architecture and decisions](docs/architecture-and-decisions.md#c03a) for the
 current implementation and its limitations.

@@ -251,3 +251,38 @@ def test_expiry_is_read_only_and_does_not_block_room(approval):
         assert saved.approval_decision == models.ApprovalStatus.APPROVED
         assert saved.state == models.ReservationState.DRAFT
         assert saved.decided_by == approver
+
+
+def test_confirm_evaluates_deadline_after_room_lock(approval, monkeypatch):
+    """C05 DD-03: crossing the deadline during serialization invalidates approval.
+
+    Advance a controlled clock at the real lock boundary; existing concurrent
+    tests separately verify contention with independent PostgreSQL sessions.
+    """
+    import src.main as api
+
+    client, Session, ids, approver, clock = approval
+    reservation = create(client, ids)
+    assert decide(client, reservation, approver).status_code == 200
+    deadline = datetime.fromisoformat(reservation['approval_deadline'])
+    clock[0] = deadline - timedelta(microseconds=1)
+    original_lock = api.lock_reservation_room
+    acquired = []
+    with Session() as db:
+        row = db.get(models.Reservation, reservation['id'])
+        before = (row.state, row.approval_decision, row.decided_by, row.decided_at)
+
+    def cross_deadline_after_lock(db, reservation_id):
+        result = original_lock(db, reservation_id)
+        acquired.append(reservation_id)
+        clock[0] = deadline
+        return result
+
+    monkeypatch.setattr(api, 'lock_reservation_room', cross_deadline_after_lock)
+    response = client.post(f"/reservations/{reservation['id']}/confirm")
+    assert acquired == [reservation['id']]
+    assert response.status_code == 409
+    assert read(client, reservation)['approval_status'] == 'EXPIRED'
+    with Session() as db:
+        row = db.get(models.Reservation, reservation['id'])
+        assert (row.state, row.approval_decision, row.decided_by, row.decided_at) == before
