@@ -2,9 +2,14 @@
 
 Owns implementation structure, architectural decisions and detailed design.
 
+**Current behavior:** the v0.3 queue delta below supersedes historical C03/C05
+Create/Confirm semantics where stated. The original milestones remain traceable.
+
 **Reading order:** C03a records the implementation baseline; C03b records the Part B design and ADR. C03a and C03b are accepted per the project owner’s confirmation recorded on 2026-10-13. C01 architecture notes remain historical. C05 scope, detailed design and verification traceability are recorded below.
 
 ## Contents
+
+- [Current v0.3 queue design delta](#v03-queue-design)
 
 - [c03a: Architecture and Decisions](#c03a)
 - [c03b: C03 — Architecture Design (Part B)](#c03b)
@@ -1628,3 +1633,79 @@ the post-lock clock boundary. No claim of exhaustive concurrency scheduling is m
 See the [C05 consistency record](evidence-and-evolution.md#c05-consistency).
 A mismatch requires deciding whether the design or the code is correct before
 changing either. The selected design retains the existing function-based owners.
+
+<a id="v03-queue-design"></a>
+
+## v0.3 — Queue design delta
+
+This design realizes [the approved queue rules](intent-and-change.md#v03-queue).
+The preceding C03/C05 artifacts remain historical. ADR-01's per-Room transaction
+boundary is retained and extended to Create. Only Confirm/Cancel assign existing
+reservation lifecycle; Confirm now also cancels conflicting drafts.
+
+| Decision | Owner / data | Contract and rationale |
+| --- | --- | --- |
+| QD-01 Serialized acceptance | `main.lock_room`, PostgreSQL Room row | Create and transitions acquire the same lock under READ COMMITTED. Insert/ID allocation occurs only after Create checks under lock, making IDs a stable FIFO key for supported API writers. |
+| QD-02 Explicit opt-in | `ReservationCreate.join_queue`, Create endpoint | 409 `detail={code,message}` for QUEUE_REQUIRED / ROOM_BOOKED. First warning has no mutation. Retry with true is permission to queue, not a reservation token or guarantee. |
+| QD-03 Shared eligibility | `queue_policy.active_request`, `overlaps`, `queue_details` | Pure rules evaluate state, current time/capacity, approval and half-open intersection. Earlier PENDING blocks; REJECTED/EXPIRED/started/over-capacity does not. |
+| QD-04 Atomic winner/losers | `main.confirm_reservation`, `save` | Query overlapping records under lock, reject earlier active competitor, assign winner CONFIRMED and other DRAFTs CANCELLED/reason, commit once. Existing save rollback/409 behavior handles IntegrityError. |
+| QD-05 Display snapshots | `main.reservation_views`, response schema, UI | Derive queue status/count from same-room context including other users; never send other users' details as queue metadata. Queue metadata is not persisted. UI retry handles changes since warning; Admin disables Confirm for non-READY status, but API still enforces independently. |
+| QD-06 Durable cancellation reason | `Reservation.cancellation_reason`, `migrate_v03` | One nullable varchar column. Repeated migration is safe; data/IDs unchanged. Old drafts adopt ID order; historical queue consent cannot be reconstructed. Legacy conflicting drafts show BLOCKED, not READY. |
+
+```mermaid
+sequenceDiagram
+    actor User2
+    participant UI
+    participant Create
+    participant DB as PostgreSQL Room transaction
+    User2->>UI: Submit request
+    UI->>Create: POST (join_queue=false)
+    Create->>DB: Lock Room; inspect overlaps
+    DB-->>Create: Earlier active draft
+    Create-->>UI: 409 QUEUE_REQUIRED; no insertion
+    UI->>User2: Join queue? Auto-cancel warning
+    alt user accepts
+        UI->>Create: POST same request (join_queue=true)
+        Create->>DB: Lock Room; recheck time/capacity/overlaps
+        alt confirmed overlap now exists
+            Create-->>UI: 409 ROOM_BOOKED; no insertion
+        else room is not allocated
+            Create->>DB: Insert DRAFT; commit
+            Create-->>UI: 201 READY or WAITING snapshot
+        end
+    else user declines
+        UI-->>User2: Not submitted
+    end
+```
+
+```text
+Confirm(id):
+  load reservation; lock Room; refresh reservation
+  sample UTC now
+  reject if not DRAFT, started, invalid approval, or over capacity
+  load direct overlaps in same Room
+  reject if any CONFIRMED overlap
+  reject if any lower-ID active DRAFT overlaps
+  winner.state = CONFIRMED
+  for each other overlapping DRAFT:
+    state = CANCELLED
+    cancellation_reason = "Another request confirmed."
+  commit all changes once; rollback on pre-commit failure
+  return reservation with derived queue metadata
+```
+
+Cancellation covers direct overlaps only, not the transitive closure. Eligibility
+and queue position are computed on read/action; no worker mutates old drafts at
+the deadline. READY means priority-ready, not approval-ready or guaranteed to
+succeed. Approval, time, capacity and overlap are rechecked at Confirm.
+
+Post-commit response failure can still leave a durable successful transaction;
+clients read current reservations to resolve ambiguity. Direct SQL writers,
+seed scripts and future Room-edit APIs must not be treated as supported concurrent
+queue writers without adopting this protocol. Current queue context is loaded
+per requested room set and evaluated in memory; this targets the small demo,
+not a measured high-load queue implementation.
+
+Frontend origin is port 5001; backend is port 5000. CORS and API_BASE use these
+ports consistently. Notification is an in-page status/reason refreshed every
+10 seconds while visible; it does not imply external delivery guarantees.

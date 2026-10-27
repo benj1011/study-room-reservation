@@ -1,0 +1,15 @@
+✔ declining queue consent does not send a second create (7.075625ms)
+✔ accepting sends explicit consent and leaves the warning visible (1.31025ms)
+✔ a booking confirmed during the dialog rejects the retry (0.549167ms)
+✔ already confirmed room does not offer a queue (0.503416ms)
+✔ successful first request displays pending confirmation (0.49975ms)
+✔ cancellation and waiting messages are rendered in My Reservations (29.461708ms)
+✔ admin cannot click Confirm for a waiting request (1.238167ms)
+ℹ tests 7
+ℹ suites 0
+ℹ pass 7
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 95.296834

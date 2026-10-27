@@ -43,25 +43,30 @@ document.getElementById("reservation-form").addEventListener("submit", async (ev
   submitBtn.textContent = "Creating…";
 
   try {
-    const reservation = await createReservation({
-      roomId,
-      roomName,
-      date,
-      start,
-      end,
-      people,
-      purpose,
-    });
+    const request = { roomId, date, start, end, people, purpose };
+    let reservation;
+    try {
+      reservation = await createReservation(request);
+    } catch (err) {
+      if (err.code !== "QUEUE_REQUIRED") throw err;
+      const accepted = window.confirm(
+        "Another request exists. Join the queue?\nYours is cancelled if an earlier request is confirmed."
+      );
+      if (!accepted) {
+        showBanner("Not submitted. Choose another time.");
+        submitBtn.disabled = false;
+        submitBtn.textContent = "Create Reservation";
+        return;
+      }
+      reservation = await createReservation({ ...request, joinQueue: true });
+    }
+    showBanner(reservationNotice(reservation), reservation.queue_status === "WAITING" ? "info" : "success");
+    submitBtn.textContent = "Submitted ✓";
+    const link = document.createElement("a");
+    link.href = "my-reservations.html";
+    link.textContent = "View my reservations →";
+    document.getElementById("banner-slot").appendChild(link);
 
-    showBanner(
-      `Reservation created: #${reservation.id}, status ${reservation.state}.`,
-      "success"
-    );
-
-    submitBtn.textContent = "Created ✓";
-    setTimeout(() => {
-      window.location.href = "my-reservations.html";
-    }, 900);
   } catch (err) {
     showBanner(err.message || "Couldn't create the reservation. Try again.", "error");
     submitBtn.disabled = false;

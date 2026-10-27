@@ -58,7 +58,7 @@ def payload(ids, start="10:00", end="11:00", **changes):
     result = dict(user_id=ids[0], room_id=ids[1],
                   start_time=f"2030-10-01T{start}:00+00:00",
                   end_time=f"2030-10-01T{end}:00+00:00",
-                  number_of_people=4, purpose="C02 acceptance example")
+                  number_of_people=4, purpose="C02 acceptance example", join_queue=True)
     result.update(changes)
     return result
 
@@ -147,13 +147,12 @@ def test_confirm_success_conflict_and_adjacent_interval(baseline):
     result = client.post(f"/reservations/{first['id']}/confirm")
     assert result.status_code == 200
     assert result.json()['state'] == 'CONFIRMED'
-    second = create(client, ids)  # Create is allowed even over a confirmed booking.
     before = stored(Session)
-    assert client.post(f"/reservations/{second['id']}/confirm").status_code == 409
+    assert client.post('/reservations', json=payload(ids)).status_code == 409
     assert stored(Session) == before
     adjacent = create(client, ids, start='11:00', end='12:00')
     assert client.post(f"/reservations/{adjacent['id']}/confirm").status_code == 200
-    assert [r[-1] for r in stored(Session)] == ['CONFIRMED','DRAFT','CONFIRMED']
+    assert [r[-1] for r in stored(Session)] == ['CONFIRMED','CONFIRMED']
 
 
 def test_confirm_rechecks_capacity(baseline):
@@ -234,7 +233,7 @@ def test_concurrent_confirms_allocate_at_most_once(baseline, monkeypatch, attemp
     results = simultaneous(monkeypatch, client,
         [f"/reservations/{r['id']}/confirm" for r in [one, two]])
     assert sorted(r.status_code for r in results) == [200,409]
-    assert sorted(r[-1] for r in stored(Session)) == ['CONFIRMED','DRAFT']
+    assert sorted(r[-1] for r in stored(Session)) == ['CANCELLED','CONFIRMED']
 
 
 @pytest.mark.parametrize('attempt', range(3))
@@ -248,13 +247,17 @@ def test_concurrent_confirm_cancel_never_resurrects(baseline, monkeypatch, attem
     assert stored(Session)[0][-1] == 'CANCELLED'
 
 
-def test_cancel_past_interval_has_no_deadline(baseline):
+def test_past_create_rejected_and_existing_past_draft_can_cancel(baseline):
     client, Session, ids = baseline
-    r = create(client, ids, start_time='2000-01-01T10:00:00Z',
-               end_time='2000-01-01T11:00:00Z')
-    assert client.post(f"/reservations/{r['id']}/confirm").status_code == 200
-    before = stored(Session)[0]
+    response = client.post('/reservations', json=payload(ids,
+        start_time='2000-01-01T10:00:00Z', end_time='2000-01-01T11:00:00Z'))
+    assert response.status_code == 422
+    r = create(client, ids)
+    from datetime import datetime, timezone
+    with Session() as db:
+        row = db.get(Reservation, r['id'])
+        row.start_time = datetime(2000, 1, 1, 10, tzinfo=timezone.utc)
+        row.end_time = datetime(2000, 1, 1, 11, tzinfo=timezone.utc)
+        db.commit()
+    assert client.post(f"/reservations/{r['id']}/confirm").status_code == 409
     assert client.post(f"/reservations/{r['id']}/cancel").status_code == 200
-    after = stored(Session)[0]
-    assert after[:-1] == before[:-1]
-    assert after[-1] == 'CANCELLED'

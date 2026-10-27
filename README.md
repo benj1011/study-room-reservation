@@ -47,7 +47,68 @@ The selected external boundary is a Notification Service. Notification
 delivery is outside the C01 implementation scope.
 
 
-## Current baseline v0.2 — approval workflow
+## Current baseline v0.3 — FIFO reservation queue
+
+- Frontend: **http://127.0.0.1:5001**; backend/Swagger: **http://127.0.0.1:5000/docs**.
+- A new overlapping request gets a short warning **before it is saved**.
+  Choose **OK** to join the queue or **Cancel** to choose another time.
+- FIFO is based on server acceptance order within a Room. Waiting requests cannot
+  be confirmed ahead of an earlier active overlapping request.
+- Confirm commits the winning booking and automatically cancels overlapping
+  drafts in the same transaction. My Reservations shows **“Another request confirmed.”**
+- Cancelling/rejecting/expiring the earlier request releases the next eligible
+  request for review; it is not automatically confirmed. New bookings must start
+  in the future. Draft queue eligibility expires at the start time or approval deadline.
+- My Reservations and Admin refresh every 10 seconds while visible. Queue
+  warnings/status describe a snapshot; API guards remain authoritative.
+
+**Existing database:** stop the API, back up the database, set `DATABASE_URL`,
+then run the additive migration before restarting:
+
+```bash
+python -m src.migrate_v03
+```
+
+This also applies missing v0.2 approval columns. Existing data and reservation
+IDs are preserved; old drafts adopt ID order and lack historical queue-consent
+records. A fresh database uses `python -m src.init_db` instead. The app does not
+run migrations automatically. To roll back deployment, stop the API and use a
+backup or the old app with the unused nullable column retained; no destructive
+downgrade is provided.
+
+Start the API and frontend in separate terminals (after configuring the database):
+
+```bash
+python -m uvicorn src.main:app --reload --host 127.0.0.1 --port 5000
+```
+
+```bash
+python3 -m http.server 5001 --bind 127.0.0.1 --directory src/frontend
+```
+
+API clients send `join_queue: true` only after consent to queue. Without consent,
+Create returns 409 with `detail.code = QUEUE_REQUIRED` and writes nothing. A
+confirmed overlap returns `ROOM_BOOKED`, even after consent. Responses add
+`queue_status`, `queue_ahead` and `cancellation_reason`; no other requester's
+identity is included in queue metadata.
+
+Current [rules](docs/intent-and-change.md#v03-queue) and
+[design](docs/architecture-and-decisions.md#v03-queue-design) supersede the
+historical v0.1/v0.2 behavior where explicitly stated. The C06 assessed tag and
+handoff ZIP remain frozen snapshots of the earlier version.
+
+Tests (PostgreSQL test `DATABASE_URL` required for Python integration tests):
+
+```bash
+python -m pytest tests -v --tb=short
+node --test tests/test_queue_ui.cjs
+```
+
+The JavaScript tests need a working Node.js 18+ installation and no npm packages.
+
+<a id="current-baseline-v02--approval-workflow"></a>
+
+## Historical baseline v0.2 — approval workflow
 
 Part B.12–14 adds approval-required rooms and an assigned Approver. See:
 
@@ -66,16 +127,16 @@ After activating `.venv` and configuring `DATABASE_URL` as below:
 
 - For a **new database**, run `python -m src.init_db`.
 - For an **existing v0.1 database**, stop its API and run
-  `python -m src.migrate_v02` before restarting. This additive migration preserves
+  `python -m src.migrate_v03` before restarting this version. This additive migration preserves
   old records as NOT_REQUIRED; `init_db` alone does not migrate old tables.
 
 Start the API:
 
 ```bash
-python -m uvicorn src.main:app --reload --host 127.0.0.1 --port 8000
+python -m uvicorn src.main:app --reload --host 127.0.0.1 --port 5000
 ```
 
-At <http://127.0.0.1:8000/docs>, try the following sequence:
+At <http://127.0.0.1:5000/docs>, try the following sequence:
 
 1. Create a student and an approver with `POST /users`; keep their returned ids.
 2. Create a room with `POST /rooms`, using the actual approver id:
@@ -299,13 +360,13 @@ separate application database; C01 continues to use `study_room_c01_test`.
 
 ```bash
 python -m src.init_db
-python -m uvicorn src.main:app --reload --host 127.0.0.1 --port 8000
+python -m uvicorn src.main:app --reload --host 127.0.0.1 --port 5000
 ```
 
-Open <http://127.0.0.1:8000/docs>. Initialization creates missing tables and
+Open <http://127.0.0.1:5000/docs>. Initialization creates missing tables and
 the PostgreSQL state enum; it does **not** migrate tables from a previous schema
-version. Use a fresh application database for this integration. Retaining old
-data requires a separate migration, especially for timestamps and enum values.
+version. For existing databases, stop the API and run `python -m src.migrate_v03`
+before starting this version.
 Importing the API does not initialize tables or connect to PostgreSQL.
 
 ### 3. Add demo data
@@ -343,10 +404,10 @@ admin authorization are not implemented.
 From the repository root:
 
 ```bash
-python3 -m http.server 5500 --bind 127.0.0.1 --directory src/frontend
+python3 -m http.server 5001 --bind 127.0.0.1 --directory src/frontend
 ```
 
-Open <http://127.0.0.1:5500>. Search for a room, create a DRAFT, confirm it
+Open <http://127.0.0.1:5001>. Search for a room, create a DRAFT, confirm it
 on the Admin page, and cancel it from My Reservations. API errors are shown
 instead of silently falling back to mock data. Entered times use the browser's
 local timezone, are sent as UTC ISO timestamps, and are displayed in local time.

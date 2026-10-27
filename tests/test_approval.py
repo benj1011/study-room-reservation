@@ -128,9 +128,9 @@ def test_delayed_approval_does_not_override_new_conflict(approval):
     assert decide(client,first,approver).status_code == 200
     assert client.post(f"/reservations/{first['id']}/confirm").status_code == 200
     clock[0] += timedelta(hours=1)
-    assert decide(client,second,approver).status_code == 200
+    assert decide(client,second,approver).status_code == 409
     assert client.post(f"/reservations/{second['id']}/confirm").status_code == 409
-    assert read(client,second)['state'] == 'DRAFT'
+    assert read(client,second)['state'] == 'CANCELLED'
 
 
 @pytest.mark.parametrize('status', ['PENDING','APPROVED','EXPIRED'])
@@ -173,7 +173,7 @@ def test_concurrent_approved_confirms_still_exclusive(approval,monkeypatch):
         assert decide(client,r,approver).status_code == 200
     results=simultaneous(monkeypatch,client,[f"/reservations/{r['id']}/confirm" for r in [one,two]])
     assert sorted(r.status_code for r in results) == [200,409]
-    assert sorted(r[-1] for r in stored(Session)) == ['CONFIRMED','DRAFT']
+    assert sorted(r[-1] for r in stored(Session)) == ['CANCELLED','CONFIRMED']
 
 
 @pytest.mark.parametrize('competitor', ['cancel','confirm','reject'])

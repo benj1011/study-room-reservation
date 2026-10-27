@@ -42,7 +42,7 @@ class RoomRead(RoomCreate):
     id: int
 
 
-class ReservationCreate(BaseModel):
+class ReservationFields(BaseModel):
     user_id: int = Field(gt=0)
     room_id: int = Field(gt=0)
     start_time: AwareDatetime
@@ -57,7 +57,11 @@ class ReservationCreate(BaseModel):
         return self
 
 
-class ReservationRead(ReservationCreate):
+class ReservationCreate(ReservationFields):
+    join_queue: bool = False
+
+
+class ReservationRead(ReservationFields):
     model_config = ConfigDict(from_attributes=True)
     id: int
     state: ReservationState
@@ -68,6 +72,9 @@ class ReservationRead(ReservationCreate):
     approval_deadline: datetime | None
     decided_by: int | None
     decided_at: datetime | None
+    cancellation_reason: str | None
+    queue_status: Literal["READY", "WAITING", "EXPIRED", "INACTIVE", "BLOCKED", "NONE"]
+    queue_ahead: int
 
 
 class ApprovalDecision(BaseModel):
