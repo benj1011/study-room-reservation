@@ -4,6 +4,7 @@ Owns recorded verification, acceptance reviews, changes, limitations and version
 
 ## Contents
 
+- [C06 self-review and presentation notes](c06.md)
 - [C05 verification](#c05-verification)
 - [Acceptance confirmation and C05 handoff](#acceptance-and-c05-handoff)
 - [milestone-evidence: C01 Engineering Spike](#milestone-evidence)
@@ -762,3 +763,14 @@ commits remain in the milestone table; this tag does not relabel their test runs
 - [x] Executed verification on real PostgreSQL and isolated domain objects.
 - [x] Compared DD and code; recorded limitations and actions.
 - [x] Recorded the delivery tag with the tested source/test manifest.
+
+<a id="c06-internal-evidence-assessment"></a>
+
+## C06 Internal Evidence Assessment
+
+The complete self-review, checklist, verified finding, owner disposition and
+presentation notes are maintained in [C06 assessment](c06.md).
+
+Assessed baseline: `5e054b359e6a8a6fafee74b93b549f8c03fd7c27` (tag `C06`).
+F-01: regression evidence gap; owner accepted a change in a later update.
+The review is complete; remediation remains open.
