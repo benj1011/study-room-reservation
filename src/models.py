@@ -108,6 +108,8 @@ class Reservation(Base):
     decided_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
     decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
+    cancellation_reason: Mapped[str | None] = mapped_column(String(100), nullable=True)
+
     def effective_approval_status(self, now: datetime) -> ApprovalStatus:
         if (self.state == ReservationState.DRAFT
                 and self.approval_decision in (ApprovalStatus.PENDING, ApprovalStatus.APPROVED)

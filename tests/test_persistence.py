@@ -51,8 +51,8 @@ def test_reservation_persists_in_postgresql():
 
                 app.dependency_overrides[get_db] = override_get_db
 
-                start_time = datetime(2026, 10, 1, 10, 0, tzinfo=timezone.utc)
-                end_time = datetime(2026, 10, 1, 11, 0, tzinfo=timezone.utc)
+                start_time = datetime(2030, 10, 1, 10, 0, tzinfo=timezone.utc)
+                end_time = datetime(2030, 10, 1, 11, 0, tzinfo=timezone.utc)
 
                 response = TestClient(app).post(
                     "/reservations",

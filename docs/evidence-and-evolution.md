@@ -4,6 +4,8 @@ Owns recorded verification, acceptance reviews, changes, limitations and version
 
 ## Contents
 
+- [v0.3 queue change verification](#v03-queue-verification)
+
 - [C06 self-review and presentation notes](c06.md)
 - [C05 verification](#c05-verification)
 - [Acceptance confirmation and C05 handoff](#acceptance-and-c05-handoff)
@@ -774,3 +776,82 @@ presentation notes are maintained in [C06 assessment](c06.md).
 Assessed baseline: `5e054b359e6a8a6fafee74b93b549f8c03fd7c27` (tag `C06`).
 F-01: regression evidence gap; owner accepted a change in a later update.
 The review is complete; remediation remains open.
+
+<a id="v03-queue-verification"></a>
+
+## v0.3 — Queue change verification
+
+Owner-authorized change on 2026-10-27: frontend/backend ports 5001/5000;
+short English queue consent; FIFO among active overlapping requests; confirm
+atomically cancels other overlapping drafts. Current specification and design:
+[v0.3 rules](intent-and-change.md#v03-queue),
+[queue design delta](architecture-and-decisions.md#v03-queue-design).
+Historical C05/C06 evidence and tags describe their frozen earlier version and
+are not rewritten as if the queue existed then.
+
+### Design decisions and tests
+
+| Decision / rule | Executable evidence | Result |
+| --- | --- | --- |
+| QD-01 / BR-14 shared Create/transition serialization | `test_queue.py::test_concurrent_creates_warn_second_without_silent_queue`, `test_create_racing_confirm_never_leaves_conflicting_live_draft`; existing concurrent Confirm tests | PASS; independent PostgreSQL backend PIDs asserted |
+| QD-02 / BR-13 explicit consent, no insert on warning | `test_join_requires_consent_and_never_writes_on_warning`; UI decline/accept cases in `test_queue_ui.cjs` | PASS |
+| BR-17 stale consent / already confirmed | `test_queue_opt_in_rechecks_confirmed_booking`; UI “confirmed during dialog” / “already confirmed” cases | PASS |
+| QD-03 FIFO and promotion | `test_cancelling_head_promotes_without_auto_confirmation`, `test_pending_head_blocks_then_rejection_or_expiry_releases` | PASS; PENDING blocks overtaking; rejected/expired head releases next eligible draft |
+| BR-16/18 time and capacity | `test_start_boundary_expires_draft_without_writing_on_read`, `test_reduced_capacity_head_does_not_block_eligible_waiter`, updated past-create regression | PASS |
+| QD-04 / BR-15 atomic winner and cancellation reason | `test_confirm_cancels_waiters_with_persistent_reason`, `test_confirmation_failure_rolls_back_winner_and_waiters` | PASS; injected error after SQL flush leaves winner/waiter unchanged in a fresh Session |
+| Half-open intervals, correct cancellation scope | Five cases in `test_half_open_intervals_and_auto_cancel_scope`; `test_other_room_and_nontransitive_overlap_are_not_cancelled` | PASS |
+| QD-05 visibility / privacy of queue metadata | `test_queue_context_includes_other_users_without_exposing_details`; UI My Reservations/Admin rendering tests | PASS; API metadata contains count/status, not predecessor identity |
+| QD-06 migration / legacy rows | `test_v03_migration_preserves_history_and_is_repeatable`, `test_legacy_draft_over_confirmed_booking_is_blocked_not_ready` | PASS; old IDs/data retained, repeated migration succeeds |
+| Port configuration | `test_frontend_origin_is_allowed`; UI API request URL assertion; updated README/API_BASE/CORS | PASS |
+
+The queue test suite adds 21 Python cases. Existing tests were updated only where
+approved rules changed: creation over confirmed booking is now rejected; the
+concurrent loser is CANCELLED rather than DRAFT; ordinary past creation/Confirm
+is no longer permitted. The common test helper opts into queueing for fixtures;
+dedicated no-consent tests verify the real API default remains false. The C01
+persistence test uses a future interval under the new Create contract.
+
+### Recorded execution
+
+- Date: 2026-10-27, Europe/Prague.
+- Base revision: `1801c6f618a3a0dd1c2b82becdb03cbc44c5e904` plus the uncommitted
+  queue change. Exact tested source/UI/tests: [SHA-256 manifest](evidence/v03-code-sha256.json).
+- Command: `.venv/bin/python -m pytest tests -v --tb=short`.
+- Result: **89 passed, 2 warnings in 3.26s**;
+  [full Python log](evidence/v03-pytest.txt).
+- JavaScript command: `node --test tests/test_queue_ui.cjs`.
+- Result: **7 passed, 0 failed**; [UI test log](evidence/v03-ui-tests.txt).
+  Tests execute actual UI scripts in a Node VM with a small fake DOM and mocked
+  responses, including consent/no-consent and stale-state handling. They are not
+  a full browser rendering or live browser/API end-to-end run.
+- PostgreSQL 17.2, isolated cluster `/tmp/study-room-v03-pg`, Unix socket
+  `/tmp/study-room-v03-socket`, port 55437, TCP disabled. Tests create and remove
+  unique schemas; no application database was migrated or modified by verification.
+- The local PATH Node 18 executable could not load an installed ICU library.
+  UI tests used the working bundled Node runtime instead; no system packages were changed.
+- The two Python warnings are existing Starlette/httpx and AnyIO deprecations.
+- Initial expiry test data placed both requests at the same start-time deadline;
+  both correctly expired. The promotion test was corrected to use separate
+  24-hour approval deadlines before their future start; the revised case passed.
+
+### Consistency and remaining limits
+
+Implementation matches the queue contracts and retains one Room transaction
+boundary. Confirm is still the state owner, now including cancellation of its
+competing drafts. Queue state is derived, not a new stored lifecycle enum.
+The nullable cancellation-reason migration is explicit and additive.
+
+The new rollback integration test supplies permanent evidence for the `save`
+IntegrityError path, but the earlier C06 F-01 also requested direct production
+`get_db` cleanup verification. That historical finding is not marked fully closed
+by this change. The frozen C06 report and handoff ZIP remain unchanged.
+
+UI updates use polling, not guaranteed notification delivery. Tests cover selected
+concurrent schedules, not load limits or every interleaving. Queue queries load
+per-room context into memory; production scalability, authenticated identity and
+direct database writers remain outside this demo guarantee. Future changes to
+request intervals or room policy need the same serialization protocol.
+
+Deployment requires stopping the existing API, applying `python -m src.migrate_v03`
+to its configured database, then restarting backend 5000 and frontend 5001.
+No commit, tag, push or production migration is claimed for this working-tree change.

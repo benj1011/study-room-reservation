@@ -43,15 +43,16 @@ function render(reservations) {
             <div class="room-code">Reservation #${r.id} &nbsp;·&nbsp; ${escapeHtml(r.room_name || "Room #" + r.room_id)}</div>
             <div class="meta-line">${startInfo.date} &nbsp;·&nbsp; ${startInfo.time} – ${endInfo.time} &nbsp;·&nbsp; ${r.number_of_people} people</div>
           </div>
-          <span class="stamp ${stampClass(r.state)}">${r.state}</span>
+          <span class="stamp ${stampClass(r.state)}">${r.queue_status === "WAITING" ? "WAITING" : r.state}</span>
         </div>
         <div class="ticket-body">
+          <p class="helper-text" role="status">${escapeHtml(reservationNotice(r))}</p>
           <p class="helper-text" style="margin: 0 0 14px;">Purpose: ${escapeHtml(r.purpose || "—")}</p>
           ${
             isPending
               ? `<div class="actions-row">
                    <button class="btn-danger" data-reject="${r.id}">Cancel</button>
-                   <button class="btn-confirm" data-confirm="${r.id}">Confirm</button>
+                   <button class="btn-confirm" data-confirm="${r.id}" ${r.queue_status !== "READY" ? "disabled" : ""}>Confirm</button>
                  </div>`
               : ""
           }
@@ -87,9 +88,9 @@ async function handleReject(id) {
   }
 }
 
-async function load() {
+async function load(silent = false) {
   const list = document.getElementById("list");
-  list.innerHTML = `<p class="helper-text">Loading reservations…</p>`;
+  if (!silent) list.innerHTML = `<p class="helper-text">Loading reservations…</p>`;
   try {
     const reservations = await getAllReservations();
     render(reservations);
@@ -100,3 +101,6 @@ async function load() {
 }
 
 load();
+
+// Refresh queue promotion and automatic cancellation without reloading the page.
+setInterval(() => { if (!document.hidden) load(true); }, 10000);

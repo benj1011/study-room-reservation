@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from src.database import create_db_engine, create_session_factory
 from src import models
+from src.queue_policy import active_request, queue_details
 from src.models import ApprovalStatus, Reservation, ReservationState, Room, User
 from src.schemas import (
     ApprovalDecision, ReservationCreate, ReservationRead, RoomCreate, RoomRead, UserCreate, UserRead,
@@ -32,7 +33,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="Study Room Reservation API", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://127.0.0.1:5500", "http://localhost:5500"],
+    allow_origins=["http://127.0.0.1:5001", "http://localhost:5001"],
     allow_methods=["GET", "POST", "PATCH"],
     allow_headers=["Content-Type", "X-User-Id"],
 )
@@ -127,7 +128,7 @@ def get_reservations(db: DB, user_id: Annotated[int | None, Query(gt=0)] = None)
     )
     if user_id is not None:
         query = query.where(Reservation.user_id == user_id)
-    return db.scalars(query).all()
+    return reservation_views(db, db.scalars(query).all())
 
 
 @app.get("/reservations/{reservation_id}", response_model=ReservationRead)
@@ -139,39 +140,80 @@ def get_reservation(reservation_id: int, db: DB):
     )
     if reservation is None:
         raise HTTPException(404, "Reservation not found")
-    return reservation
+    return reservation_views(db, [reservation])[0]
 
 
 @app.post("/reservations", response_model=ReservationRead, status_code=201)
 def create_reservation(payload: ReservationCreate, db: DB):
     if db.get(User, payload.user_id) is None:
         raise HTTPException(404, "User not found")
-    room = db.get(Room, payload.room_id)
-    if room is None:
-        raise HTTPException(404, "Room not found")
+    room = lock_room(db, payload.room_id)
+    now = models.utc_now()
+    if payload.start_time <= now:
+        raise HTTPException(422, "Choose a future time.")
     if payload.number_of_people > room.capacity:
         raise HTTPException(422, f"Room capacity is {room.capacity} people")
+    candidates = overlapping_reservations(db, room.id, payload.start_time, payload.end_time)
+    if any(r.state == ReservationState.CONFIRMED for r in candidates):
+        raise HTTPException(409, {"code": "ROOM_BOOKED", "message": "Room already booked. Choose another time."})
+    if any(active_request(r, room, now) for r in candidates) and not payload.join_queue:
+        raise HTTPException(409, {
+            "code": "QUEUE_REQUIRED",
+            "message": "Another request exists. Join the queue? Yours is cancelled if an earlier request is confirmed.",
+        })
     approval_fields = {}
     if room.requires_approval:
-        now = models.utc_now()
-        if payload.start_time <= now:
-            raise HTTPException(422, "Approval-required reservations must start in the future")
         approval_fields = {
             "approval_decision": ApprovalStatus.PENDING,
             "approval_deadline": min(now + timedelta(hours=24), payload.start_time),
         }
-    reservation = Reservation(**payload.model_dump(), state=ReservationState.DRAFT, **approval_fields)
+    # Allocate the ID only after the Room lock: IDs define acceptance order per room.
+    reservation = Reservation(**payload.model_dump(exclude={"join_queue"}),
+                              state=ReservationState.DRAFT, **approval_fields)
     db.add(reservation)
-    return save(db, reservation)
+    return reservation_views(db, [save(db, reservation)])[0]
+
+
+def overlapping_reservations(db, room_id, start, end):
+    return db.scalars(select(Reservation).where(
+        Reservation.room_id == room_id,
+        Reservation.state != ReservationState.CANCELLED,
+        Reservation.start_time < end,
+        Reservation.end_time > start,
+    ).order_by(Reservation.id)).all()
+
+
+def reservation_views(db, reservations):
+    """One additional query for queue context; never expose other users' details."""
+    if not reservations:
+        return []
+    room_ids = {r.room_id for r in reservations}
+    candidates = db.scalars(select(Reservation).where(
+        Reservation.room_id.in_(room_ids), Reservation.state != ReservationState.CANCELLED,
+    )).all()
+    now = models.utc_now()
+    results = []
+    for reservation in reservations:
+        status, ahead = queue_details(reservation, reservation.room, candidates, now)
+        # Response-only attributes: queue status is derived, not a second lifecycle.
+        reservation.queue_status = status
+        reservation.queue_ahead = ahead
+        results.append(ReservationRead.model_validate(reservation))
+    return results
+
+
+def lock_room(db: Session, room_id: int):
+    room = db.scalar(select(Room).where(Room.id == room_id).with_for_update())
+    if room is None:
+        raise HTTPException(404, "Room not found")
+    return room
 
 
 def lock_reservation_room(db: Session, reservation_id: int):
     reservation = require_reservation(db, reservation_id)
     # All state transitions lock the same room first. PostgreSQL's default
     # READ COMMITTED isolation lets the next query see the preceding commit.
-    room = db.scalar(select(Room).where(Room.id == reservation.room_id).with_for_update())
-    if room is None:
-        raise HTTPException(404, "Room not found")
+    room = lock_room(db, reservation.room_id)
     # The reservation may have changed while this request waited for the lock.
     db.refresh(reservation)
     return reservation, room
@@ -182,23 +224,28 @@ def confirm_reservation(reservation_id: int, db: DB):
     reservation, room = lock_reservation_room(db, reservation_id)
     if reservation.state != ReservationState.DRAFT:
         raise HTTPException(409, "Only DRAFT reservations can be confirmed")
-    if reservation.effective_approval_status(models.utc_now()) not in (
+    now = models.utc_now()
+    if reservation.start_time <= now:
+        raise HTTPException(409, "Request expired.")
+    if reservation.effective_approval_status(now) not in (
         ApprovalStatus.NOT_REQUIRED, ApprovalStatus.APPROVED,
     ):
         raise HTTPException(409, "Reservation requires a valid approval before confirmation")
     if reservation.number_of_people > room.capacity:
         raise HTTPException(422, f"Room capacity is {room.capacity} people")
-    conflict = db.scalar(select(Reservation.id).where(
-        Reservation.room_id == room.id,
-        Reservation.id != reservation.id,
-        Reservation.state == ReservationState.CONFIRMED,
-        Reservation.start_time < reservation.end_time,
-        Reservation.end_time > reservation.start_time,
-    ).limit(1))
-    if conflict is not None:
-        raise HTTPException(409, "Another confirmed reservation overlaps this room and time")
+    candidates = overlapping_reservations(db, room.id, reservation.start_time, reservation.end_time)
+    if any(r.state == ReservationState.CONFIRMED for r in candidates):
+        raise HTTPException(409, "Room already booked.")
+    if any(r.id < reservation.id and active_request(r, room, now) for r in candidates):
+        raise HTTPException(409, "An earlier request is waiting.")
     reservation.state = ReservationState.CONFIRMED
-    return save(db, reservation)
+    # Both winner and overlapping drafts change in this one locked transaction.
+    for waiting in candidates:
+        if waiting.id != reservation.id and waiting.state == ReservationState.DRAFT:
+            waiting.state = ReservationState.CANCELLED
+            waiting.cancellation_reason = "Another request confirmed."
+    return reservation_views(db, [save(db, reservation)])[0]
+
 
 
 @app.post("/reservations/{reservation_id}/cancel", response_model=ReservationRead)
@@ -208,7 +255,8 @@ def cancel_reservation(reservation_id: int, db: DB):
     if reservation.state == ReservationState.CANCELLED:
         raise HTTPException(409, "Reservation is already cancelled")
     reservation.state = ReservationState.CANCELLED
-    return save(db, reservation)
+    reservation.cancellation_reason = "Cancelled by user."
+    return reservation_views(db, [save(db, reservation)])[0]
 
 
 @app.post("/reservations/{reservation_id}/approve", response_model=ReservationRead)
@@ -234,4 +282,4 @@ def approve_reservation(
     reservation.approval_decision = ApprovalStatus(payload.decision)
     reservation.decided_by = actor_id
     reservation.decided_at = now
-    return save(db, reservation)
+    return reservation_views(db, [save(db, reservation)])[0]

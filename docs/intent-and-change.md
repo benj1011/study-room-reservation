@@ -2,9 +2,11 @@
 
 Owns requirements, business rules, operation contracts and observable behavior.
 
-**Current baseline:** C02 v0.2. Its explicitly unchanged v0.1 rules remain applicable. C01 and v0.1 sections preserve historical intent; v0.2 changes take precedence.
+**Current baseline:** v0.3 queue change below. It supersedes the overlapping-draft, creation-time and Confirm semantics of v0.1/v0.2. Earlier milestone sections remain historical; unchanged approval and allocation rules still apply.
 
 ## Contents
+
+- [v0.3 — FIFO queue and automatic cancellation](#v03-queue)
 
 - [c01-intent: Project Frame](#c01-intent)
 - [c02-v01: Baseline v0.1 — complete minimum system](#c02-v01)
@@ -1458,3 +1460,75 @@ flowchart TD
     Eligible -- Yes --> Save[Record chosen decision, actor and server time]
     Save --> End([200; remains DRAFT; no allocation])
 ```
+
+<a id="v03-queue"></a>
+
+## v0.3 — FIFO queue and automatic cancellation
+
+Approved change: the owner requested a short English warning when another draft
+already overlaps, explicit consent to queue, FIFO priority, and automatic
+cancellation of waiting requests when a competing booking is confirmed.
+This section supersedes contradictory historical v0.1/v0.2 statements; it does
+not rewrite the assessed C06 baseline or its results.
+
+### Requirements and rules
+
+| ID | Rule / observable behavior |
+| --- | --- |
+| REQ-09 / BR-13 — Consent | Create for a room with an active overlapping DRAFT returns 409 `QUEUE_REQUIRED` without insertion unless `join_queue=true`. The UI asks before resubmitting. Declining leaves no reservation. |
+| REQ-10 / BR-14 — FIFO | Among directly overlapping active drafts for the same Room, earlier server acceptance has priority. An active earlier request prevents Confirm of a later one, including when the earlier request awaits approval. Priority is by immutable server-generated ID allocated under the Room lock, not client time or ID order across rooms. Concurrent arrivals are ordered by lock acquisition. |
+| REQ-11 / BR-15 — Atomic cancellation | Confirm changes the winner to CONFIRMED and all other directly overlapping DRAFTs to CANCELLED in one transaction. Retain their data/approval attribution; persist cancellation_reason `Another request confirmed.`. Never cancel adjacent, other-room or only transitively overlapping bookings. |
+| REQ-12 / BR-16 — Release and expiry | Cancelled, approval-rejected, approval-expired, started or over-capacity drafts do not block later requests. Queue metadata is derived; when blockers disappear, the next eligible draft becomes READY, never automatically CONFIRMED. DRAFT queue eligibility expires at start time even for ordinary rooms. Reads do not change persisted lifecycle. |
+| BR-17 — Confirmed overlap | Create over a CONFIRMED interval returns 409 `ROOM_BOOKED` without writing, even with `join_queue=true`. The opt-in retry rechecks current state. Confirm retains the existing final exclusivity check. |
+| BR-18 — Future requests | All new reservations require start_time > server UTC time, sampled after the Room lock. Confirm at/after start is a conflict. Existing expired drafts can still be cancelled; completed CONFIRMED allocations are not undone by time. |
+
+Active means DRAFT, future start, attendance <= current capacity, and effective
+approval NOT_REQUIRED, PENDING or APPROVED. PENDING keeps its turn but cannot
+Confirm until APPROVED. Original assigned-approver and deadline rules remain.
+An inactive earlier draft may be cancelled when a later eligible request confirms
+its overlapping slot; cancellation reason therefore does not promise that the
+winning request always had a lower ID. Approval status/attribution remain intact.
+
+A queue is local to overlapping intervals, not one global queue per Room. For
+A=09:00–10:00, B=09:30–10:30, C=10:00–11:00 in acceptance order, B waits for A and
+C waits for B. Confirming A cancels B; C becomes READY and can be confirmed because
+A and C are adjacent. `queue_ahead` counts active earlier direct overlaps, not a
+global queue position or guaranteed waiting time.
+
+### Operation changes
+
+| Operation | Contract delta |
+| --- | --- |
+| OP-01 Create | Lock Room before decision and insertion; validate future time/capacity, reject confirmed overlap, require consent for active draft overlap; insert DRAFT after successful checks. `join_queue` is request-only, defaults false. 201 contains queue metadata. |
+| OP-02 Check Availability | Still hides rooms with overlapping CONFIRMED allocations. Drafts do not allocate; selecting an available room may lead to a consent warning at submission. Availability is not a hold. |
+| OP-03 Confirm | Lock and refresh; enforce lifecycle/time/approval/capacity, no confirmed overlap and no earlier active overlapping draft; commit winning allocation plus draft cancellations atomically. Waiting attempts return 409 without mutations. |
+| OP-04 Cancel | Persist CANCELLED and `Cancelled by user.`. Queue release is derived on the next read/action. Cancelled waiters never revive if the winning booking is later cancelled. |
+| OP-05 Approve | Still changes approval only. Rejection/expiry removes a draft from priority consideration. Approval never permits overtaking an active earlier draft or guarantees allocation. |
+| Reads | Return queue_status READY/WAITING/EXPIRED/INACTIVE/BLOCKED/NONE, queue_ahead and nullable cancellation_reason. BLOCKED covers preserved legacy drafts overlapping confirmed bookings. Only counts/status are added, not other users' identity or purpose. |
+
+The waiting request stays DRAFT; WAITING is not a new lifecycle state. No email,
+push notification, scheduler, automatic confirmation or auto-revival is introduced.
+UI pages refresh status every 10 seconds while visible and after local actions.
+Existing demo identity and API authorization limitations remain unchanged.
+
+### User-facing English messages
+
+- Consent: “Another request exists. Join the queue? Yours is cancelled if an earlier request is confirmed.”
+- Waiting: “Waiting. Auto-cancelled if an earlier request is confirmed.”
+- Cancelled by competing confirmation: “Another request confirmed.”
+- Already booked: “Room already booked. Choose another time.”
+- Ready: “Pending confirmation. Room not reserved yet.”
+
+### Acceptance scenarios
+
+| Scenario | Expected |
+| --- | --- |
+| Second user submits an overlapping draft without consent | Warning/409, no new row; declining does not insert |
+| Second user accepts | 201 DRAFT, WAITING; earlier active request cannot be bypassed |
+| First user confirms | First CONFIRMED; overlapping drafts CANCELLED with persistent reason |
+| First cancels/rejects/expires | Next eligible draft READY; still requires explicit Confirm and all guards |
+| Consent dialog stays open while first confirms | Retry returns ROOM_BOOKED; no queued row |
+| Concurrent Create/Create without consent | Exactly one 201, one QUEUE_REQUIRED; one row |
+| Concurrent Create/Confirm | Create either precedes Confirm and is cancelled, or follows it and is rejected |
+| Failure after changes are flushed but before commit | Winner and cancelled drafts all roll back |
+| Half-open adjacency, another Room, transitive-only overlap | No inappropriate priority blocking or cancellation |
