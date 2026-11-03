@@ -181,7 +181,7 @@ flowchart LR
   end
   DB[(PostgreSQL)]
 
-  Caller -->|POST confirm(id)| Main
+  Caller -->|"POST confirm(id)"| Main
   Main -->|check approval; update mapped Reservation| Models
   Main -->|create engine and session factory at startup| Database
   Database -->|open SQLAlchemy connection| DB
@@ -270,9 +270,9 @@ sequenceDiagram
   participant DB as PostgreSQL Unit of Work
   Admin->>API: Confirm reservation
   API->>UC: actor and reservation id
-  UC->>DB: begin transaction; load reservation and room
-  UC->>DB: lock room row; refresh reservation
-  Note over UC,DB: Re-read after lock; sample decision time after waiting
+  UC->>DB: begin transaction, load reservation and room
+  UC->>DB: lock room row, refresh reservation
+  Note over UC,DB: Re-read after lock, sample decision time after waiting
   UC->>UC: check state, approval, capacity, and overlap
   alt all guards pass
     UC->>DB: persist CONFIRMED and commit
@@ -1188,7 +1188,7 @@ sequenceDiagram
     par competing request A
         AdminA->>HTTP: POST /reservations/{id}/confirm
         HTTP->>Ops: confirm(reservation id)
-        Ops->>Tx: load reservation; lock its Room; refresh
+        Ops->>Tx: load reservation, lock its Room, refresh
         Tx->>DB: SELECT reservation and Room FOR UPDATE
         DB-->>Tx: locked Room and current reservation
         Tx-->>Ops: refreshed state
@@ -1204,12 +1204,12 @@ sequenceDiagram
     and competing request B
         AdminB->>HTTP: POST /reservations/{id}/confirm
         HTTP->>Ops: confirm(reservation id)
-        Ops->>Tx: load reservation; wait for same Room lock
+        Ops->>Tx: load reservation, wait for same Room lock
     end
     DB-->>Tx: commit succeeds for A
     Tx-->>HTTP: confirmed reservation
     HTTP-->>AdminA: 200 ReservationRead
-    Tx->>DB: lock released; refresh B after lock
+    Tx->>DB: lock released, refresh B after lock
     DB-->>Tx: current room state includes A's booking
     Tx-->>Ops: refreshed state for B
     Ops->>Tx: check overlap
@@ -1585,7 +1585,7 @@ sequenceDiagram
     participant R as Reservation
     Caller->>Op: POST confirm(id)
     Op->>Tx: lock_reservation_room(db, id)
-    Tx->>DB: load Reservation; SELECT Room FOR UPDATE
+    Tx->>DB: load Reservation, SELECT Room FOR UPDATE
     Note over Tx,DB: Wait for competing transition to commit/rollback
     Tx->>DB: refresh Reservation
     Tx-->>Op: current reservation, locked room
@@ -1600,7 +1600,7 @@ sequenceDiagram
     alt all guards pass
         Op->>R: state = CONFIRMED
         Op->>Tx: save(db, reservation)
-        Tx->>DB: commit; refresh
+        Tx->>DB: commit, refresh
         Tx-->>Op: persisted reservation
         Op-->>Caller: 200 ReservationRead
     else first guard fails (stop at that guard)
@@ -1660,17 +1660,17 @@ sequenceDiagram
     participant DB as PostgreSQL Room transaction
     User2->>UI: Submit request
     UI->>Create: POST (join_queue=false)
-    Create->>DB: Lock Room; inspect overlaps
+    Create->>DB: Lock Room, inspect overlaps
     DB-->>Create: Earlier active draft
-    Create-->>UI: 409 QUEUE_REQUIRED; no insertion
+    Create-->>UI: 409 QUEUE_REQUIRED, no insertion
     UI->>User2: Join queue? Auto-cancel warning
     alt user accepts
         UI->>Create: POST same request (join_queue=true)
-        Create->>DB: Lock Room; recheck time/capacity/overlaps
+        Create->>DB: Lock Room, recheck time/capacity/overlaps
         alt confirmed overlap now exists
-            Create-->>UI: 409 ROOM_BOOKED; no insertion
+            Create-->>UI: 409 ROOM_BOOKED, no insertion
         else room is not allocated
-            Create->>DB: Insert DRAFT; commit
+            Create->>DB: Insert DRAFT, commit
             Create-->>UI: 201 READY or WAITING snapshot
         end
     else user declines
