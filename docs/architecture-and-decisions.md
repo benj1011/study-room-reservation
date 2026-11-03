@@ -1656,22 +1656,22 @@ reservation lifecycle; Confirm now also cancels conflicting drafts.
 sequenceDiagram
     actor User2
     participant UI
-    participant Create
+    participant BookingAPI as Create reservation endpoint
     participant DB as PostgreSQL Room transaction
     User2->>UI: Submit request
-    UI->>Create: POST (join_queue=false)
-    Create->>DB: Lock Room, inspect overlaps
-    DB-->>Create: Earlier active draft
-    Create-->>UI: 409 QUEUE_REQUIRED, no insertion
+    UI->>BookingAPI: POST (join_queue=false)
+    BookingAPI->>DB: Lock Room, inspect overlaps
+    DB-->>BookingAPI: Earlier active draft
+    BookingAPI-->>UI: 409 QUEUE_REQUIRED, no insertion
     UI->>User2: Join queue? Auto-cancel warning
     alt user accepts
-        UI->>Create: POST same request (join_queue=true)
-        Create->>DB: Lock Room, recheck time/capacity/overlaps
+        UI->>BookingAPI: POST same request (join_queue=true)
+        BookingAPI->>DB: Lock Room, recheck time/capacity/overlaps
         alt confirmed overlap now exists
-            Create-->>UI: 409 ROOM_BOOKED, no insertion
+            BookingAPI-->>UI: 409 ROOM_BOOKED, no insertion
         else room is not allocated
-            Create->>DB: Insert DRAFT, commit
-            Create-->>UI: 201 READY or WAITING snapshot
+            BookingAPI->>DB: Insert DRAFT, commit
+            BookingAPI-->>UI: 201 READY or WAITING snapshot
         end
     else user declines
         UI-->>User2: Not submitted
