@@ -1532,3 +1532,87 @@ Existing demo identity and API authorization limitations remain unchanged.
 | Concurrent Create/Confirm | Create either precedes Confirm and is cancelled, or follows it and is rejected |
 | Failure after changes are flushed but before commit | Winner and cancelled drafts all roll back |
 | Half-open adjacency, another Room, transitive-only overlap | No inappropriate priority blocking or cancellation |
+
+<a id="c08-controlled-change-card"></a>
+
+## C08 — Controlled change card: approval timeout
+
+**Status: DEFER; no product behavior is changed by this record.** The 30-minute
+timeout is the candidate described by the C08 exercise, not a confirmed
+customer or team request.
+
+### Request and baseline
+
+- **Request source / need:** the C08 exercise asks the team to evaluate a
+  30-minute pending-approval timeout. No requester, incident, service-level
+  objective, or user acceptance was supplied. The product owner must establish
+  that a 30-minute window solves a real problem before the team commits to it.
+- **Before behavior:** [BR-10 and BR-11](intent-and-change.md#c02-v02-new-shared-rules-and-state-semantics)
+  define the current deadline as `min(server UTC Create time + 24 hours,
+  reservation start)`. At `now >= deadline`, PENDING or APPROVED DRAFTs have
+  an effective EXPIRED status and cannot be approved or confirmed. EXPIRED is
+  derived; the stored decision and lifecycle are not rewritten by a read.
+- **Candidate scope:** for new approval-required reservations only, replace
+  the 24-hour cap with 30 minutes while retaining the earlier reservation
+  start as the deadline. Continue to require every existing permission,
+  capacity, queue, and exclusive-allocation guard.
+- **Out of scope:** automatic confirmation, notifications, a background
+  scheduler, UI redesign, and a persisted EXPIRED transition. These would
+  require separate requests and decisions.
+- **Candidate acceptance conditions (not yet accepted):**
+  - **AC-01:** a timely assigned-approver decision may be recorded before the
+    deadline; it does not allocate the room.
+  - **AC-02:** at or after the deadline, approval and confirmation cannot
+    create an eligible approval or a CONFIRMED reservation.
+  - **AC-03:** use the server UTC clock and an exact `now >= deadline`
+    boundary; for a start earlier than 30 minutes, the start remains the
+    effective deadline.
+  - **AC-04:** an expiry read is non-mutating; persisted lifecycle and
+    decision history remain unchanged, and confirmed-room exclusivity is
+    preserved.
+- **Unresolved acceptance:** the treatment of existing pending records,
+  whether 30 minutes is measured from request creation or another event, and
+  the user-facing explanation need product-owner approval. AC-01–04 are
+  proposals, not a release contract.
+
+### Impact matrix
+
+| Dimension / exact artifact | Decision and reason | Needed delta / verification | Owner / evidence |
+|---|---|---|---|
+| Spec / state: [BR-10, BR-11](intent-and-change.md#c02-v02-new-shared-rules-and-state-semantics) | **CHANGE if accepted.** The current 24-hour cap conflicts with the candidate; derived expiry is an existing contract. | Approve the 30-minute origin, exact boundary, and existing-record policy; retain non-mutating reads unless separately changed. | Product owner; no approval recorded. |
+| Architecture / ownership / interfaces: [OP-03, OP-05](intent-and-change.md#c02-v02-views-op-03-activity) | **CHECK.** Existing room-lock serialization and approve/confirm operations are authoritative; no worker is currently required. | Recheck expiration after the lock; preserve 409 rejection, authorization, and serialization behavior. | Team; see [approval design](architecture-and-decisions.md#c03b). |
+| Detailed design / code: `src/main.py`, `src/models.py` | **CHANGE if accepted.** Create currently sets the deadline to 24 hours or the start, whichever comes first; model logic derives expiry. | Change the Create deadline policy only after the rule is accepted; test Create, Approve, Confirm, and unchanged post-expiry state. | C09 implementer; current code and [approval tests](../tests/test_approval.py). |
+| Data / schema / migration: `src/migrate_v02.py`, `src/migrate_v03.py` | **CHECK; likely no schema delta** if only new records receive a different deadline. There is no schema-version table. Existing rows already store a deadline, but grandfathering versus recalculation is undecided. | Decide existing-record handling before implementation. Do not rewrite stored deadlines or run a migration without that decision. | Product owner + implementer; current migrations. |
+| Configuration / CI / release: `README.md`, `requirements.txt` | **CHECK.** The deadline is currently application policy, not a documented deployment setting. | Update operational docs and run tests against isolated PostgreSQL; document rollback compatibility if accepted. | Release owner; current README and test setup. |
+| Tests / integration / risks: `tests/test_approval.py`, `tests/test_baseline.py` | **CHANGE if accepted.** Existing controlled-clock cases cover deadline boundaries and allocation regressions; this execution was blocked in the current environment. | Add 29:59, 30:00, and 30:01 cases with start later than the deadline; retain collision, authorization, and persistence assertions. | Test owner; see [C08 evidence](evidence-and-evolution.md#c08-evidence). |
+| Operation / recovery | **CHECK.** Expiry is derived on access; there is no scheduler or automatic cleanup. | Keep that model unless a separate operational requirement calls for durable expiry; specify monitoring and rollback before release. | Operations owner; not yet assigned. |
+
+### Options and decision
+
+| Option | Meets candidate AC? | Benefit | Cost / failure / rollback | Verification |
+|---|---|---|---|---|
+| A. Keep the existing 24-hour-or-start deadline | No, if 30 minutes is formally required; it preserves the accepted baseline while need is unconfirmed. | No code, data, or deployment risk; the existing behavior remains known. | Does not address a proven need for faster review; current expiry remains derived. | Re-run existing approval/deadline regression suite on isolated PostgreSQL. |
+| B. Use a 30-minute-or-start deadline for new requests, retaining derived expiry | Yes, for AC-01–04 once the open policy details are settled. | Reuses the stored deadline and current serialization; no worker or schema change expected. | Existing-record policy and user messaging still need decisions; regression must prove exact-boundary behavior and no allocation after expiry. | Controlled UTC-clock tests at 29:59, 30:00, and 30:01; persisted-state and overlap checks. |
+| C. Persist expiry through a worker or scheduled transition | Potentially, but it changes the proposed state/operations contract and is not needed to reject late actions. | Could provide a durable lifecycle event if audit requirements demand one. | Adds scheduling, retries, races with Approve/Confirm, operational ownership, and recovery; rollback is more complex. | Worker failure/retry, lock-race, audit, and database migration tests would be required. |
+
+**Inaction:** keep the existing 24-hour-or-start contract and do not promise
+30-minute review. If the owner later confirms a service need, provide a named
+review owner or other explicit operational mitigation while implementation is
+pending; no such mitigation is currently evidenced.
+
+**Peer review:** not performed. No teammate review or approval is claimed.
+The team must name a reviewer and record the challenged assumption before
+changing this decision.
+
+**Decision: DEFER — 2026-11-04.** Owner: Study Room Reservation Team; a named
+product owner is not identified in this workspace. The missing inputs are the
+real request source and benefit, existing-record treatment, and peer review.
+Revisit when a product owner supplies those decisions and a teammate reviews
+the acceptance conditions. Until then, the current 24-hour rule remains the
+only accepted behavior.
+
+**C09 handoff if accepted:** first pin an identifiable baseline; then change
+only the deadline policy for new protected-room requests. Verify before,
+exactly at, and after the boundary, plus ordinary-room creation, rejection,
+authorization, cancellation, FIFO, confirmed-overlap protection, and persisted
+state. No implementation or release is authorized by this deferred card.

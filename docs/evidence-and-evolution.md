@@ -855,3 +855,96 @@ request intervals or room policy need the same serialization protocol.
 Deployment requires stopping the existing API, applying `python -m src.migrate_v03`
 to its configured database, then restarting backend 5000 and frontend 5001.
 No commit, tag, push or production migration is claimed for this working-tree change.
+
+<a id="c08-evidence"></a>
+
+## C08 — Approval-timeout baseline and verification record
+
+Related decision: [C08 controlled change card](intent-and-change.md#c08-controlled-change-card).
+The candidate 30-minute change is **DEFERRED**; the cases below describe the
+existing 24-hour-or-start behavior and do not claim the candidate is accepted.
+
+### Baseline identity and setup
+
+- **Workspace revision:** not identifiable. The supplied workspace has no
+  `.git` directory, so no local commit or tag can be asserted and the recorded
+  v0.3 test manifest cannot be proven to describe this exact snapshot.
+- **Rules:** current approval contract is
+  [BR-10 / BR-11](intent-and-change.md#c02-v02-new-shared-rules-and-state-semantics);
+  the current queue regression contract is
+  [v0.3](intent-and-change.md#v03-queue).
+- **Runtime observed for this attempt:** Python 3.14.7.
+- **Database/schema:** PostgreSQL is required by the integration fixtures.
+  There is no schema-version table. New databases use `python -m src.init_db`;
+  existing databases use `python -m src.migrate_v03`, which also applies v0.2
+  approval columns. No database was configured, initialized, or migrated for
+  this C08 attempt.
+- **Test setup:** `tests/test_approval.py` uses a controlled UTC clock and
+  isolated PostgreSQL schemas created and dropped by the `baseline` fixture.
+  The fixture creates its own users/rooms/reservations; no application data is
+  intended to be used.
+- **Previously recorded evidence (not a C08 run):** the v0.3 full-suite record
+  reports 89 passed, 2 warnings on 2026-10-27 at its recorded working-tree
+  revision. It is historical evidence only and does not replace the blocked
+  execution below.
+
+### TC-C08-01 — timely approval and confirmation
+
+**Basis:** existing BR-08/BR-10/BR-11 and the existing 24-hour maximum.
+**Risk:** a valid approval must remain separate from allocation, then permit a
+valid Confirm before expiry. **Case setup:** isolated PostgreSQL schema;
+controlled clock `2030-09-30T10:00:00Z`; approval-required room with assigned
+approver; reservation interval `[2030-10-02T10:00Z, 2030-10-02T11:00Z)`.
+Expected deadline is `2030-10-01T10:00:00Z`.
+
+| # | Action / input | Expected before execution | Actual after execution | Evidence |
+|---|---|---|---|---|
+| 1 | Create the reservation using the assigned test student and room. | One persisted DRAFT/PENDING reservation; deadline is Create + 24 hours; no allocation. | BLOCKED before fixture setup; no row was created. | `tests/test_approval.py`; `tests/test_baseline.py::baseline`. |
+| 2 | Approve at `2030-09-30T10:00:00Z` with the assigned approver identity. | 200; reservation remains DRAFT/APPROVED; `decided_by` and `decided_at` are recorded; no allocation yet. | BLOCKED; endpoint was not called. | Same test fixture and approval endpoint. |
+| 3 | Read the row in a fresh SQLAlchemy Session, then Confirm before the deadline. | Persisted approval attribution is present; Confirm succeeds and the row is persisted CONFIRMED. | BLOCKED; persisted state was not observed. | Independent persistence oracle: fresh Session query of the reservation. |
+
+**Final postcondition:** timely approval permits confirmation without changing
+the separation between approval and allocation. **Verdict: BLOCKED**; setup
+failed before any test step, so no PASS or FAIL is claimed.
+
+### TC-C08-02 — approval exactly at the deadline
+
+**Basis:** BR-10's exact `now >= deadline` rule and BR-11's non-mutating,
+derived expiry. **Risk:** an approval at the boundary must not be recorded.
+**Case setup:** a fresh isolated schema; controlled clock
+`2030-09-30T10:00:00Z`; the same approval-required room; reservation interval
+`[2030-10-02T10:00Z, 2030-10-02T11:00Z)`. This makes the deadline
+`2030-10-01T10:00:00Z`, earlier than reservation start, so the boundary is
+not confounded with the start-time guard.
+
+| # | Action / input | Expected before execution | Actual after execution | Evidence |
+|---|---|---|---|---|
+| 1 | Create the reservation and independently read its stored deadline and state. | One DRAFT with stored approval_decision=PENDING; deadline exactly 24 hours after the controlled Create time. | BLOCKED before fixture setup; no row was created. | `tests/test_approval.py`; fresh Session persistence read. |
+| 2 | Set the controlled clock to exactly `2030-10-01T10:00:00Z`; call Approve as the assigned approver. | 409; no approval decision is written and state does not become CONFIRMED. | BLOCKED; request was not sent. | Controlled `models.utc_now`; Approve endpoint. |
+| 3 | Read both the API representation and the row in a fresh Session. | API effective status is EXPIRED; stored state remains DRAFT and stored decision remains PENDING; no `decided_by`/`decided_at` is added. | BLOCKED; neither response nor persisted row was observed. | Independent fresh Session query; API read. |
+
+**Final postcondition:** expiry is visible but a read/failed approval does not
+mutate lifecycle or stored decision. **Verdict: BLOCKED**; setup failed before
+the boundary was reached, so no PASS or FAIL is claimed.
+
+### Execution attempt and reproducible unblock
+
+- **Attempted:** `python -m pytest tests/test_approval.py -q --tb=short`
+- **Observed:** test setup fails in `tests/test_baseline.py::baseline` when
+  `src.database.create_db_engine()` raises `RuntimeError: DATABASE_URL is not
+  set`. The approval test bodies did not execute; this is a test-environment
+  blocker, not evidence that the application behavior passes or fails.
+- **Reproduce:** from the project root, provide `DATABASE_URL` for a disposable
+  PostgreSQL database whose role can create/drop schemas, then run:
+
+  ```bash
+  python -m pytest tests/test_approval.py -q --tb=short
+  ```
+
+- **Next step:** rerun both cases against that isolated PostgreSQL setup and
+  record the actual HTTP responses plus independent persisted-state queries.
+  Do not point the fixture at a production or shared application database.
+- **Not covered:** the deferred 30-minute policy, treatment of pre-existing
+  requests if a policy change is accepted, a real browser/API deployment,
+  notification or monitoring behavior, and races across every possible
+  interleaving.
