@@ -2,11 +2,13 @@
 
 ## Documentation
 
-The project maintains three documents across C01, C02, C03a, C03b and C05:
+The project maintains core documentation across C01, C02, C03a, C03b and C05:
 
 - [Intent and change](docs/intent-and-change.md): requirements, rules, scenarios and baseline changes.
 - [Architecture and decisions](docs/architecture-and-decisions.md): architecture, ADRs and design.
 - [Evidence and evolution](docs/evidence-and-evolution.md): verification, reviews and milestone history.
+- [C08 Controlled Change guide](docs/C08_FINAL.html): Czech/English assignment guide, worked examples and reusable templates.
+- [C08 project change card](docs/intent-and-change.md#c08-controlled-change-card) and [C08 verification record](docs/evidence-and-evolution.md#c08-evidence): candidate approval-timeout change, decision, test cases and execution limits.
 
 Historical sections are retained and labelled; raw test output and hash manifests remain in `docs/evidence/`.
 
