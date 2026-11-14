@@ -948,3 +948,59 @@ the boundary was reached, so no PASS or FAIL is claimed.
   requests if a policy change is accepted, a real browser/API deployment,
   notification or monitoring behavior, and races across every possible
   interleaving.
+
+<a id="c09-release-record"></a>
+
+## C09 — Integration, CI and release record
+
+This repository remains on the accepted C08 baseline: the candidate approval-timeout
+change is still `DEFER`, not `ACCEPT`, and therefore there is no implementation
+release to certify. The project records a no-change C09 handoff and the
+repeatable local verification path, rather than fabricating a new product change.
+
+### Change basis and product state
+
+- **C08 decision:** `DEFER`; missing inputs are the real service need, policy for
+  existing records, and a named reviewer. The decision is recorded in
+  [C08 controlled change card](intent-and-change.md#c08-controlled-change-card).
+- **Before and after:** no application behavior, data, migration, or configuration
+  delta was introduced for this record. The verification script and documentation
+  are new, while the product baseline remains unchanged.
+- **Accepted product behavior:** the current contract remains the derived expiry rule
+  documented in BR-10 and BR-11, with the effective deadline defined as the
+  earlier of `Create + 24 hours` and the reservation start time.
+- **Affected scope:** none beyond the verification and documentation workflow; no
+  code path or persisted state was changed by this C09 record.
+
+### Review and real evidence
+
+| Test ID | Independent accepted oracle | Exact command / data | Expected | Actual | Verdict | Evidence |
+|---|---|---|---|---|---|---|
+| C08 acceptance baseline | Existing BR-10/BR-11 contract and isolated PostgreSQL fixtures | `python -m pytest tests/test_approval.py -q --tb=short` | Execution against isolated PostgreSQL and controlled clock | `RuntimeError: DATABASE_URL is not set` before any approval test body runs | `BLOCKED` | `tests/test_baseline.py::baseline`; `src/database.py` |
+| Project suite | Existing project tests, including PostgreSQL-backed integration fixtures | `python scripts/run_project_checks.py` | Run the suite against a configured disposable PostgreSQL database | Script was invoked; it exited with status 2 and reported that `DATABASE_URL` is required. Pytest did not start. | `BLOCKED` (suite `NOT RUN`) | `scripts/run_project_checks.py`; command output |
+
+**Actual integration boundary:** not reached in this environment because there is no
+configured PostgreSQL role and URL for the project fixture. The blocked execution is
+therefore environment-related, not a product-pass verdict.
+
+### Automation and reproducibility
+
+- **Automated script:** [`scripts/run_project_checks.py`](../scripts/run_project_checks.py)
+- **Command:** `python scripts/run_project_checks.py`
+- **Preconditions:** set `DATABASE_URL` for a disposable PostgreSQL database and optionally
+  `PGPASSWORD` if the local role requires it.
+- **Observed result here:** the script was invoked and exited early with a clear configuration
+  message because the environment is not configured for the project's PostgreSQL integration
+  fixtures; pytest did not start.
+
+### Release identity and decision
+
+- **Artifact / tag / commit:** none; this is a documented no-change release state.
+- **Runtime and dependency lock:** project baseline remains unchanged; the current
+  application contract and generated evidence are those already recorded in the repo.
+- **Database and configuration:** no new migration or application database was created for this
+  C09 record.
+- **Rollback/recovery:** N/A; no application change was introduced.
+- **Decision:** `NO_CHANGE / CONDITIONAL` while the C08 decision remains `DEFER`. The current
+  product state remains the existing 24-hour-or-start approval expiry rule until a named owner
+  signs the new requirement, defines the treatment of existing rows, and accepts the review.

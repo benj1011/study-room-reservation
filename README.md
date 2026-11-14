@@ -9,8 +9,31 @@ The project maintains core documentation across C01, C02, C03a, C03b and C05:
 - [Evidence and evolution](docs/evidence-and-evolution.md): verification, reviews and milestone history.
 - [C08 Controlled Change guide](docs/C08_FINAL.html): Czech/English assignment guide, worked examples and reusable templates.
 - [C08 project change card](docs/intent-and-change.md#c08-controlled-change-card) and [C08 verification record](docs/evidence-and-evolution.md#c08-evidence): candidate approval-timeout change, decision, test cases and execution limits.
+- [C09 release record](docs/evidence-and-evolution.md#c09-release-record): no-change baseline evidence for the deferred approval-timeout request and the repeatable project check.
 
 Historical sections are retained and labelled; raw test output and hash manifests remain in `docs/evidence/`.
+
+## C09 — Integration, CI and release record
+
+The C08 approval-timeout card remains a deferred decision: no customer, product-owner,
+or peer-reviewed acceptance was recorded for a 30-minute deadline, and the current
+contract stays the original 24-hour-or-start expiry rule. The repository therefore
+records a no-change C09 state rather than a new feature implementation.
+
+- **C08 decision:** `DEFER`; missing decision inputs are the real service need,
+  existing-record handling, and a named reviewer. See
+  [C08 controlled change card](docs/intent-and-change.md#c08-controlled-change-card).
+- **Before / after product baseline:** behavior, schema, migrations, and
+  configuration are unchanged. This C09 handoff adds documentation and a test
+  runner, not an application behavior change.
+- **Automation:** `python scripts/run_project_checks.py` runs the project suite once
+  `DATABASE_URL` is configured and optional `PGPASSWORD` is set.
+- **Release decision:** `NO_CHANGE / CONDITIONAL`; the current product state stays
+  unchanged until a product owner accepts a bounded policy change and supplies the
+  required review evidence.
+
+The detailed evidence and the exact executed/blocked checks are recorded in
+[C09 release record](docs/evidence-and-evolution.md#c09-release-record).
 
 ## C05 — Detailed Design
 
